@@ -1,0 +1,410 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             xmlns:models="clr-namespace:FrostyEditor.Models"
+             mc:Ignorable="d"
+             x:Class="FrostyEditor.Views.TextureAssetEditorView"
+             x:Name="Root"
+             x:DataType="viewModels:TextureAssetEditorViewModel"
+             d:DesignWidth="1100"
+             d:DesignHeight="720">
+  <UserControl.Resources>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         FROZEN NAME COLUMN TEMPLATE
+         Only the expand glyph + name text. No horizontal scroll.
+         ═══════════════════════════════════════════════════════════ -->
+    <DataTemplate x:Key="InspectorNameTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Border Background="Transparent"
+              Padding="3,0,2,0"
+              Height="18"
+              ClipToBounds="True"
+              PointerPressed="OnInspectorNamePointerPressed">
+        <Grid ColumnDefinitions="16,*"
+              Margin="{Binding NameIndent}">
+          <Path Width="7"
+                Height="7"
+                Fill="#DADADA"
+                Stretch="Uniform"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Data="{Binding ExpandGlyphData}"
+                IsVisible="{Binding ShowExpandGlyph}"/>
+          <TextBlock Grid.Column="1"
+                     VerticalAlignment="Center"
+                     FontSize="10"
+                     LineHeight="12"
+                     FontWeight="{Binding NameFontWeight}"
+                     TextWrapping="NoWrap">
+            <Run Text="{Binding Name}"/>
+            <Run Text="{Binding NameSuffix}"/>
+          </TextBlock>
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SCROLLABLE VALUE COLUMN TEMPLATE
+         All value controls. Horizontal scroll lives here only.
+         ═══════════════════════════════════════════════════════════ -->
+    <DataTemplate x:Key="InspectorValueTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid Height="18"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorValuePointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <MenuItem Header="Paste" Tag="paste" Click="OnPasteMenuItemClick"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Border Background="Transparent"
+                Padding="4,0,6,0"
+                Height="18"
+                ClipToBounds="True">
+          <Grid>
+            <CheckBox IsVisible="{Binding IsBooleanVisible}"
+                      Classes="compact-checkbox"
+                      IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                      VerticalAlignment="Center"
+                      HorizontalAlignment="Left"
+                      Margin="0"
+                      Padding="0"/>
+            <StackPanel IsVisible="{Binding IsPointerDisplayVisible}"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        VerticalAlignment="Center">
+              <Image Source="{Binding PointerTypeIcon}"
+                     Width="12"
+                     Height="12"
+                     Margin="0"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding PointerTypeName}"/>
+              <StackPanel Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <SelectableTextBlock Classes="inspector-value"
+                                     Text="{Binding PointerDisplayName}"
+                                     ToolTip.Tip="{Binding PointerGuidText}"
+                                     FontWeight="{Binding NameFontWeight}"/>
+                <SelectableTextBlock Classes="inspector-value"
+                                     Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                     IsVisible="{Binding ShowPointerDisplayPath}"
+                                     Opacity="0.5"/>
+              </StackPanel>
+            </StackPanel>
+            <!-- Plain selectable text — click to select/copy, no tooltip clutter -->
+            <SelectableTextBlock Classes="inspector-value"
+                                 Text="{Binding Value}"
+                                 IsVisible="{Binding IsTextVisible}"
+                                 FontWeight="{Binding NameFontWeight}"/>
+            <TextBox Classes="inspector-editor"
+                     Text="{Binding EditorText, Mode=TwoWay}"
+                     IsVisible="{Binding IsEditorVisible}"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Left"
+                     VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     FontSize="10"
+                     Padding="0"
+                     Margin="0"
+                     AcceptsReturn="False"
+                     TextWrapping="NoWrap"
+                     Height="16"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     PointerPressed="OnInspectorEditorPointerPressed"
+                     ContextRequested="OnInspectorEditorContextRequested"
+                     LostFocus="OnInspectorEditorLostFocus"
+                     KeyDown="OnInspectorEditorKeyDown"/>
+          </Grid>
+        </Border>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+
+    <!-- ── FROZEN NAME LIST ──────────────────────────────────────── -->
+    <Style Selector="ListBox.inspector-name-list">
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+      <Setter Property="IsScrollChainingEnabled" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Hidden"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
+    <!-- ── SCROLLABLE VALUE LIST ─────────────────────────────────── -->
+    <Style Selector="ListBox.inspector-list">
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+      <Setter Property="IsScrollChainingEnabled" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Visible"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar">
+      <Setter Property="AllowAutoHide" Value="False"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Vertical]">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Horizontal]">
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
+    <!-- ── COMPACT CHECKBOX ─────────────────────────────────────── -->
+    <Style Selector="CheckBox.compact-checkbox">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="CheckBorder"
+                  Width="14"
+                  Height="14"
+                  Background="#232328"
+                  BorderBrush="#8A8A90"
+                  BorderThickness="1"
+                  CornerRadius="2">
+            <Path x:Name="CheckGlyph"
+                  Width="8"
+                  Height="6"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Stroke="#F3F3F3"
+                  StrokeThickness="1.75"
+                  Stretch="Fill"
+                  Opacity="0"
+                  Data="M0,3 L2.4,5.6 L8,0"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:checked /template/ Path#CheckGlyph">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:pointerover /template/ Border#CheckBorder">
+      <Setter Property="BorderBrush" Value="#A2A2A8"/>
+    </Style>
+
+    <!-- ── INLINE TEXT EDITOR ───────────────────────────────────── -->
+    <Style Selector="TextBox.inspector-editor">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="MinHeight" Value="16"/>
+      <Setter Property="MaxHeight" Value="16"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="True"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Hidden"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:focus">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+
+    <!-- ── SELECTABLE VALUE TEXT ────────────────────────────────── -->
+    <Style Selector="SelectableTextBlock.inspector-value">
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="LineHeight" Value="12"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,1,380">
+
+    <!-- ═══ TOP TOOLBAR ════════════════════════════════════════════ -->
+    <Border Grid.ColumnSpan="3" Classes="panel" Padding="6" Margin="0,0,0,8">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+          <Button Classes="toolbar" Content="Export" Command="{Binding ExportTextureCommand}"/>
+          <Button Classes="toolbar" Content="Import" Command="{Binding ImportTextureCommand}"/>
+          <Button Classes="toolbar" Content="Revert" Command="{Binding RevertTextureCommand}" IsVisible="{Binding CanRevert}"/>
+          <Border Width="1" Height="22" Background="#5A5A60" Margin="8,0,8,0" VerticalAlignment="Center"/>
+          <ToggleButton x:Name="RedButton" Content="R" IsChecked="True" MinWidth="28" Command="{Binding ToggleRedCommand}"/>
+          <ToggleButton x:Name="GreenButton" Content="G" IsChecked="True" MinWidth="28" Command="{Binding ToggleGreenCommand}"/>
+          <ToggleButton x:Name="BlueButton" Content="B" IsChecked="True" MinWidth="28" Command="{Binding ToggleBlueCommand}"/>
+          <ToggleButton x:Name="AlphaButton" Content="A" IsChecked="True" MinWidth="28" Command="{Binding ToggleAlphaCommand}"/>
+          <ToggleButton x:Name="LumaButton" Content="Y" MinWidth="28" Margin="6,0,0,0" Command="{Binding ToggleLuminanceCommand}"/>
+          <ToggleButton x:Name="CheckerButton" Content="Grid" IsChecked="True" MinWidth="44" Command="{Binding ToggleCheckerboardCommand}"/>
+          <TextBlock Text="Mip:" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
+          <ComboBox Width="150"
+                    ItemsSource="{Binding AvailableMips}"
+                    SelectedIndex="{Binding SelectedMipLevel}" />
+          <TextBlock Text="Slice:" VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="{Binding HasSliceSelector}" FontSize="11"/>
+          <ComboBox Width="82"
+                    IsVisible="{Binding HasSliceSelector}"
+                    ItemsSource="{Binding AvailableSlices}"
+                    SelectedIndex="{Binding SelectedSliceLevel}" />
+          <Button Classes="toolbar" Content="-" Width="28" Margin="10,0,0,0" Click="OnZoomOutClicked"/>
+          <Button Classes="toolbar" Content="Reset" Width="54" Click="OnResetViewClicked"/>
+          <Button Classes="toolbar" Content="+" Width="28" Click="OnZoomInClicked"/>
+          <TextBlock Text="{Binding ZoomText}" VerticalAlignment="Center" Width="52" TextAlignment="Center" FontSize="11"/>
+        </StackPanel>
+        <TextBlock Grid.Column="1"
+                   Text="{Binding TextureFormatLabel}"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Right"
+                   Margin="12,0,0,0"
+                   Classes="subtle"
+                   FontWeight="SemiBold"/>
+      </Grid>
+    </Border>
+
+    <!-- ═══ TEXTURE PREVIEW ════════════════════════════════════════ -->
+    <Border Grid.Row="1" Grid.Column="0" Classes="panel" Padding="0" ClipToBounds="True">
+      <Grid>
+        <Rectangle Fill="#FF8A8A8A" IsVisible="{Binding ShowPreviewCheckerboard}"/>
+        <Grid x:Name="CheckerboardBackground" IsVisible="{Binding ShowPreviewCheckerboard}">
+          <Grid.Background>
+            <DrawingBrush TileMode="Tile" DestinationRect="0,0,32,32" Stretch="None">
+              <DrawingBrush.Drawing>
+                <GeometryDrawing Brush="#FFBDBDBD">
+                  <GeometryDrawing.Geometry>
+                    <GeometryGroup>
+                      <RectangleGeometry Rect="0,0,16,16"/>
+                      <RectangleGeometry Rect="16,16,16,16"/>
+                    </GeometryGroup>
+                  </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+              </DrawingBrush.Drawing>
+            </DrawingBrush>
+          </Grid.Background>
+        </Grid>
+        <Border x:Name="ViewportHost" Background="Transparent" ClipToBounds="True">
+          <Canvas x:Name="PreviewCanvas" Background="Transparent">
+            <Image x:Name="PreviewImage"
+                   Source="{Binding PreviewBitmap}"
+                   Stretch="None"
+                   RenderTransformOrigin="0,0"/>
+          </Canvas>
+        </Border>
+      </Grid>
+    </Border>
+
+    <!-- ═══ COLUMN SPLITTER ════════════════════════════════════════ -->
+    <GridSplitter Grid.Row="1"
+                  Grid.Column="1"
+                  Width="1"
+                  Background="#3B3B3B"
+                  HorizontalAlignment="Stretch"
+                  ResizeDirection="Columns"/>
+
+    <!-- ═══ PROPERTIES PANEL ═══════════════════════════════════════ -->
+    <Border Grid.Row="1" Grid.Column="2" Classes="panel" Padding="8">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Text="Properties" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,6"/>
+        <Grid Grid.Row="1" RowDefinitions="Auto,*">
+          <TextBox Classes="search-box"
+                   Watermark="Filter"
+                   Margin="0,0,0,6"
+                   Text="{Binding FilterText}"/>
+
+          <!-- ┌─────────────────────────────────────────────────────┐
+               │  FROZEN NAME COL │ GRIP │ SCROLLABLE VALUE COL      │
+               │  No H-scroll     │      │ H+V scrollable            │
+               └─────────────────────────────────────────────────────┘ -->
+          <Grid Grid.Row="1"
+                ColumnDefinitions="Auto,1,*"
+                Margin="0,0,0,4"
+                ClipToBounds="True">
+
+            <!-- Frozen name column — vertical sync only, no H-scroll -->
+            <ListBox x:Name="InspectorNameList"
+                     Width="{Binding InspectorNameColumnWidth}"
+                     Classes="inspector-name-list"
+                     ItemsSource="{Binding VisibleNodes}"
+                     ItemTemplate="{StaticResource InspectorNameTemplate}"/>
+
+            <!-- Resize grip -->
+            <Border Grid.Column="1"
+                    x:Name="InspectorColumnGrip"
+                    Background="#35353A"
+                    Cursor="SizeWestEast"
+                    PointerPressed="OnInspectorGripPressed"
+                    PointerMoved="OnInspectorGripMoved"
+                    PointerReleased="OnInspectorGripReleased"
+                    ZIndex="10"/>
+
+            <!-- Scrollable value column — H+V scroll -->
+            <ListBox x:Name="InspectorValueList"
+                     Grid.Column="2"
+                     Classes="inspector-list"
+                     ItemsSource="{Binding VisibleNodes}"
+                     ItemTemplate="{StaticResource InspectorValueTemplate}"
+                     ScrollViewer.AllowAutoHide="False"
+                     ScrollViewer.IsScrollInertiaEnabled="False"
+                     ScrollViewer.IsScrollChainingEnabled="False"
+                     ScrollViewer.HorizontalScrollBarVisibility="Visible"
+                     ScrollViewer.VerticalScrollBarVisibility="Visible"/>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

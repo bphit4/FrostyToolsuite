@@ -42,6 +42,34 @@ public static class FileSystemManager
 
     private static readonly Dictionary<string, Block<byte>> s_memoryFs = new();
 
+    private static void ResetState()
+    {
+        IsInitialized = false;
+
+        BasePath = string.Empty;
+        CacheName = string.Empty;
+        Base = 0;
+        Head = 0;
+        BundleFormat = BundleFormat.Dynamic2018;
+        GamePlatform = GamePlatform.Invalid;
+        SuperBundleManifest = null;
+        DefaultInstallChunk = null;
+
+        Sources.Clear();
+        Sources.Add(FileSystemSource.Patch);
+        Sources.Add(FileSystemSource.Base);
+
+        s_superBundleMapping.Clear();
+        s_persistentIndexMapping.Clear();
+        s_reversePersistentIndexMapping.Clear();
+        s_idMapping.Clear();
+        s_installChunks.Clear();
+        s_sbIcMapping.Clear();
+        s_casFiles.Clear();
+        s_casFileCache.Clear();
+        s_memoryFs.Clear();
+    }
+
     public static bool Initialize(string basePath)
     {
         if (IsInitialized)
@@ -61,6 +89,7 @@ public static class FileSystemManager
             return false;
         }
 
+        ResetState();
         BasePath = Path.GetFullPath(basePath);
 
         CacheName = Path.Combine(Utils.Utils.BaseDirectory, "Caches", $"{ProfilesLibrary.InternalName}");
@@ -506,10 +535,20 @@ public static class FileSystemManager
                 }
 
                 uint index = installChunk.AsDict().AsUInt("persistentIndex", (uint)s_installChunks.Count);
-                s_persistentIndexMapping.Add(index, s_installChunks.Count);
-                s_reversePersistentIndexMapping.Add(s_installChunks.Count, index);
-                s_idMapping.Add(ic.Id, s_installChunks.Count);
+                int installChunkIndex = s_installChunks.Count;
                 s_installChunks.Add(ic);
+
+                if (!s_persistentIndexMapping.TryAdd(index, installChunkIndex))
+                {
+                    FrostyLogger.Logger?.LogWarning($"Duplicate install chunk persistent index {index} for \"{ic.Name}\". Keeping the first mapping.");
+                }
+
+                s_reversePersistentIndexMapping[installChunkIndex] = index;
+
+                if (!s_idMapping.TryAdd(ic.Id, installChunkIndex))
+                {
+                    FrostyLogger.Logger?.LogWarning($"Duplicate install chunk id {ic.Id} for \"{ic.Name}\". Keeping the first mapping.");
+                }
 
                 foreach (DbObject superBundle in installChunk.AsDict().AsList("superbundles"))
                 {

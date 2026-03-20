@@ -4,26 +4,299 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
              xmlns:models="clr-namespace:FrostyEditor.Models"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             xmlns:views="clr-namespace:FrostyEditor.Views"
+             mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
              x:Class="FrostyEditor.Views.MainView"
              x:DataType="viewModels:MainViewModel"
              x:CompileBindings="True">
-  
-  <Grid RowDefinitions="Auto,2*,*" ColumnDefinitions="*,2*">
-    <ContentControl Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="{Binding Menu}" />
-    <ContentControl Grid.Row="1" Grid.RowSpan="2" Grid.Column="0"  Content="{Binding DataExplorer}" />
-    <ContentControl Grid.Row="2" Grid.Column="1" Content="{Binding Logger}" />
-    <TabControl Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" ItemsSource="{Binding Documents}">
-      <TabControl.ItemTemplate>
-        <DataTemplate>
-          <TextBlock Text="{Binding Header}" />
-        </DataTemplate>
-      </TabControl.ItemTemplate>
-      <TabControl.ContentTemplate>
-        <DataTemplate x:DataType="models:DocumentModel">
-          <ContentControl Content="{Binding Content}" />
-        </DataTemplate>
-      </TabControl.ContentTemplate>
-    </TabControl>
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseActiveDocumentCommand}" />
+    <KeyBinding Gesture="Ctrl+D" Command="{Binding CloseAllDocumentsCommand}" />
+  </UserControl.KeyBindings>
+
+  <UserControl.Styles>
+    <Style Selector="Border.document-tab">
+      <Setter Property="Background" Value="#35353A"/>
+      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="4,4,0,0"/>
+      <Setter Property="Padding" Value="10,7"/>
+      <Setter Property="Width" Value="220"/>
+      <Setter Property="Height" Value="34"/>
+    </Style>
+
+    <Style Selector="Button.tab-close">
+      <Setter Property="Width" Value="18"/>
+      <Setter Property="Height" Value="18"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="8,0,0,0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#F2F2F2"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <Style Selector="Button.tab-nav">
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="models:TextDocumentContent">
+      <Border Classes="panel" Padding="14" Margin="0,8,0,0">
+        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12" />
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="models:HomePageContent">
+      <Grid ColumnDefinitions="*,12,*" Margin="0,8,0,0">
+        <Border Grid.Column="0" Classes="panel" Padding="0">
+          <Grid RowDefinitions="Auto,*">
+            <Border Background="#3A3A3F" Padding="10,6" BorderBrush="#505056" BorderThickness="0,0,0,1">
+              <TextBlock Text="Convenient Links" FontWeight="SemiBold" FontSize="13"/>
+            </Border>
+            <ScrollViewer Grid.Row="1" Padding="12" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Visible">
+              <StackPanel Spacing="10">
+                <TextBlock Text="Use these references while working in FrostyToolsuite 2.0." Classes="subtle" TextWrapping="Wrap"/>
+                <ItemsControl ItemsSource="{Binding Links}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:HomePageLinkItem">
+                      <Grid ColumnDefinitions="220,*" Margin="0,0,0,2">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Label}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                        <SelectableTextBlock Grid.Column="1"
+                                             Text="{Binding Url}"
+                                             TextWrapping="NoWrap"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="2" Classes="panel" Padding="0">
+          <Grid RowDefinitions="Auto,*">
+            <Border Background="#3A3A3F" Padding="10,6" BorderBrush="#505056" BorderThickness="0,0,0,1">
+              <TextBlock Text="Change Log" FontWeight="SemiBold" FontSize="13"/>
+            </Border>
+            <TabControl Grid.Row="1" Margin="8" ItemsSource="{Binding ChangelogTabs}">
+              <TabControl.ItemTemplate>
+                <DataTemplate x:DataType="models:HomePageChangelogTab">
+                  <TextBlock Text="{Binding Title}" FontSize="11.5"/>
+                </DataTemplate>
+              </TabControl.ItemTemplate>
+              <TabControl.ContentTemplate>
+                <DataTemplate x:DataType="models:HomePageChangelogTab">
+                  <ScrollViewer Padding="8" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Visible">
+                    <StackPanel Spacing="10">
+                      <TextBlock Text="{Binding Intro}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                      <SelectableTextBlock Text="{Binding Body}"
+                                           FontFamily="Consolas"
+                                           TextWrapping="Wrap"/>
+                    </StackPanel>
+                  </ScrollViewer>
+                </DataTemplate>
+              </TabControl.ContentTemplate>
+            </TabControl>
+          </Grid>
+        </Border>
+      </Grid>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Grid RowDefinitions="Auto,Auto,*" Margin="6">
+    <Border Classes="surface" Grid.Row="0" Padding="0">
+      <Menu Background="Transparent" Margin="4,2">
+        <MenuItem Header="File">
+          <MenuItem Header="New Project" Command="{Binding NewProjectCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/New.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem Header="Open Project" Command="{Binding OpenProjectCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Open.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+          <Separator />
+          <MenuItem Header="Save" Command="{Binding SaveProjectCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Save.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem Header="Save As" Command="{Binding SaveProjectAsCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/SaveAs.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+          <Separator />
+          <MenuItem Header="Exit" Command="{Binding ExitApplicationCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Exit.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+        </MenuItem>
+        <MenuItem Header="Tools">
+          <MenuItem Header="Export to Mod" Command="{Binding ExportModCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Export.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem Header="Launch Game" Command="{Binding LaunchCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Play.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+        </MenuItem>
+        <MenuItem Header="Window">
+          <MenuItem Header="Reset Window Settings" Command="{Binding ResetWindowSettingsCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/RestoreWindow.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+        </MenuItem>
+        <MenuItem Header="Help">
+          <MenuItem Header="About" Command="{Binding OpenAboutCommand}">
+            <MenuItem.Icon>
+              <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Home.png" Width="16" Height="16"/>
+            </MenuItem.Icon>
+          </MenuItem>
+        </MenuItem>
+      </Menu>
+    </Border>
+
+    <Border Grid.Row="1" Classes="panel" Margin="0,6,0,6" Padding="6">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Classes="toolbar primary" Command="{Binding NewProjectCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Source="avares://FrostyEditor/Assets/Toolbar/New.png" Width="16" Height="16"/>
+            <TextBlock Text="New"/>
+          </StackPanel>
+        </Button>
+        <Button Classes="toolbar" Command="{Binding OpenProjectCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Source="avares://FrostyEditor/Assets/Toolbar/Open.png" Width="16" Height="16"/>
+            <TextBlock Text="Open"/>
+          </StackPanel>
+        </Button>
+        <Button Classes="toolbar" Command="{Binding SaveProjectCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Source="avares://FrostyEditor/Assets/Toolbar/Save.png" Width="16" Height="16"/>
+            <TextBlock Text="Save"/>
+          </StackPanel>
+        </Button>
+        <Button Classes="toolbar primary" Command="{Binding LaunchCommand}" Margin="6,0,0,0">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Image Source="avares://FrostyEditor/Assets/Toolbar/Launch.png" Width="16" Height="16"/>
+            <TextBlock Text="Launch"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <Grid x:Name="ShellGrid" Grid.Row="2" ColumnDefinitions="450,6,*" RowDefinitions="*,8,180">
+      <Border Grid.Column="0" Grid.RowSpan="3" Classes="surface" Padding="8">
+        <views:DataExplorerView x:Name="DataExplorerView" DataContext="{Binding DataExplorer}" />
+      </Border>
+
+      <GridSplitter Grid.Column="1"
+                    Grid.RowSpan="3"
+                    Width="6"
+                    Background="#3B3B3B"
+                    HorizontalAlignment="Stretch"
+                    ResizeDirection="Columns"/>
+
+      <Border Grid.Column="2" Grid.Row="0" Classes="surface" Padding="0">
+        <Grid RowDefinitions="Auto,*">
+          <Border Background="#2D2D30" Padding="10,7" CornerRadius="4,4,0,0">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+              <Button Grid.Column="0"
+                      Classes="toolbar tab-nav"
+                      Margin="0,0,8,0"
+                      Click="OnScrollTabsLeftClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Back.png" Width="16" Height="16"/>
+              </Button>
+              <ScrollViewer x:Name="DocumentTabsScrollViewer"
+                            Grid.Column="1"
+                            HorizontalScrollBarVisibility="Hidden"
+                            VerticalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="DocumentTabsItemsControl"
+                              ItemsSource="{Binding Documents}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="4"/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:DocumentModel">
+                      <Border Classes="document-tab"
+                              Background="{Binding TabBackground}"
+                              BorderBrush="{Binding TabBorderBrush}"
+                              ToolTip.Tip="{Binding Description}"
+                              PointerPressed="OnDocumentTabPressed">
+                        <Grid ColumnDefinitions="*,Auto">
+                          <TextBlock Grid.Column="0"
+                                     Text="{Binding Header}"
+                                     Foreground="{Binding TabForeground}"
+                                     FontWeight="SemiBold"
+                                     FontSize="12"
+                                     TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center"/>
+                          <Button Grid.Column="1"
+                                  Classes="tab-close"
+                                  Margin="4,0,0,0"
+                                  Command="{Binding CloseCommand}"
+                                  Content="X"/>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <Button Grid.Column="2"
+                      Classes="toolbar tab-nav"
+                      Margin="8,0,0,0"
+                      Click="OnScrollTabsRightClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Forward.png" Width="16" Height="16"/>
+              </Button>
+              <Button Grid.Column="3" Classes="toolbar" Margin="8,0,0,0" Command="{Binding CloseActiveDocumentCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/CloseWindow.png" Width="14" Height="14"/>
+                  <TextBlock Text="Close"/>
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="4" Classes="toolbar" Margin="8,0,0,0" Command="{Binding CloseAllDocumentsCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/CloseAll.png" Width="14" Height="14"/>
+                  <TextBlock Text="Close All"/>
+                </StackPanel>
+              </Button>
+            </Grid>
+          </Border>
+          <Border Grid.Row="1" Padding="12">
+            <ContentControl Content="{Binding ActiveDocument.Content}" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="2"
+                    Grid.Row="1"
+                    Height="8"
+                    Background="#3B3B3B"
+                    HorizontalAlignment="Stretch"
+                    ResizeDirection="Rows"/>
+
+      <Border Grid.Column="2" Grid.Row="2" Classes="surface" Padding="10">
+        <ContentControl Content="{Binding Logger}" />
+      </Border>
+    </Grid>
+
   </Grid>
 </UserControl>

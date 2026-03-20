@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,7 @@ namespace Frosty.Sdk.IO.RiffEbx;
 
 public class EbxReader : BaseEbxReader
 {
+    private static readonly ConcurrentDictionary<Type, Dictionary<uint, PropertyInfo>> s_propertyMapCache = new();
     private long m_payloadOffset;
     private EbxFixup m_fixup;
     private readonly EbxTypeResolver m_typeResolver;
@@ -123,7 +125,19 @@ public class EbxReader : BaseEbxReader
         int boxedValueCount = inStream.ReadInt32();
         m_boxedValues.EnsureCapacity(boxedValueCount);
 
-        inStream.Position += arrayCount * (sizeof(uint) + sizeof(int) + sizeof(uint) + sizeof(ushort) + sizeof(ushort));
+        for (int i = 0; i < arrayCount; i++)
+        {
+            EbxExtra array = new()
+            {
+                Offset = inStream.ReadUInt32(),
+                Count = inStream.ReadInt32(),
+                Hash = inStream.ReadUInt32(),
+                Flags = inStream.ReadUInt16(),
+                TypeDescriptorRef = inStream.ReadUInt16()
+            };
+
+            EbxWriter.SetArrayExtra(m_fixup.PartitionGuid, array);
+        }
 
         for (int i = 0; i < boxedValueCount; i++)
         {
@@ -150,13 +164,12 @@ public class EbxReader : BaseEbxReader
         }
 
         Type objType = obj.GetType();
-        PropertyInfo[] properties = objType.GetProperties();
+        Dictionary<uint, PropertyInfo> propertyMap = GetPropertyMap(objType);
 
         for (int i = 0; i < inTypeDescriptor.FieldCount; i++)
         {
             EbxFieldDescriptor fieldDescriptor = m_typeResolver.ResolveField(inTypeDescriptor.FieldIndex + i);
-            PropertyInfo? propertyInfo = properties.FirstOrDefault(prop =>
-                prop.GetCustomAttribute<NameHashAttribute>()?.Hash == fieldDescriptor.NameHash);
+            propertyMap.TryGetValue(fieldDescriptor.NameHash, out PropertyInfo? propertyInfo);
 
             m_stream.Position = inStartOffset + fieldDescriptor.DataOffset;
 
@@ -234,6 +247,26 @@ public class EbxReader : BaseEbxReader
 
         // ordering of fields is weird
         m_stream.Position = inStartOffset + inTypeDescriptor.Size;
+    }
+
+    private static Dictionary<uint, PropertyInfo> GetPropertyMap(Type objType)
+    {
+        return s_propertyMapCache.GetOrAdd(objType, static type =>
+        {
+            Dictionary<uint, PropertyInfo> map = new();
+            foreach (PropertyInfo property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                uint hash = property.GetNameHash();
+                if (hash == uint.MaxValue)
+                {
+                    continue;
+                }
+
+                map.TryAdd(hash, property);
+            }
+
+            return map;
+        });
     }
 
     private void SharedReadField(TypeFlags.TypeEnum inType, Action<object?> inAddFunc)
@@ -495,12 +528,19 @@ public class EbxReader : BaseEbxReader
 
         if (typeRef.Type!.Name == s_collectionName)
         {
-            value = Activator.CreateInstance(typeRef.Type)!;
+            Type elementType = typeRef.Type.GenericTypeArguments[0];
+            if (b.Flags.GetTypeEnum() == TypeFlags.TypeEnum.Class)
+            {
+                elementType = typeof(PointerRef);
+            }
+
+            Type collectionType = typeof(ObservableCollection<>).MakeGenericType(elementType);
+            value = Activator.CreateInstance(collectionType)!;
             ReadBoxedArray(b.Flags.GetTypeEnum(), b.TypeDescriptorRef, obj =>
             {
-                if (typeof(IDelegate).IsAssignableFrom(typeRef.Type.GenericTypeArguments[0]))
+                if (typeof(IDelegate).IsAssignableFrom(elementType))
                 {
-                    IDelegate @delegate = (IDelegate)Activator.CreateInstance(typeRef.Type.GenericTypeArguments[0])!;
+                    IDelegate @delegate = (IDelegate)Activator.CreateInstance(elementType)!;
                     @delegate.FunctionType = (IType?)obj;
                     obj = @delegate;
                 }
@@ -509,9 +549,9 @@ public class EbxReader : BaseEbxReader
                     return;
                 }
 
-                if (typeof(IPrimitive).IsAssignableFrom(typeRef.Type.GenericTypeArguments[0]))
+                if (typeof(IPrimitive).IsAssignableFrom(elementType))
                 {
-                    IPrimitive primitive = (IPrimitive)Activator.CreateInstance(typeRef.Type.GenericTypeArguments[0])!;
+                    IPrimitive primitive = (IPrimitive)Activator.CreateInstance(elementType)!;
                     primitive.FromActualType(obj);
                     obj = primitive;
                 }
@@ -621,3 +661,4 @@ public class EbxReader : BaseEbxReader
         return new SdkType(type);
     }
 }
+

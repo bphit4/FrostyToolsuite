@@ -37,8 +37,8 @@ public class EbxWriter : BaseEbxWriter
 
     private readonly EbxTypeResolver m_typeResolver;
 
-    public EbxWriter(DataStream inStream)
-        : base(inStream)
+    public EbxWriter(DataStream inStream, EbxWriteFlags inFlags = EbxWriteFlags.None)
+        : base(inStream, inFlags)
     {
         m_typeResolver = new EbxTypeResolver(m_typeDescriptors, m_fieldDescriptors);
     }
@@ -856,3 +856,5 @@ public class EbxWriter : BaseEbxWriter
         return base.AddString(inValue);
     }
 }
+
+

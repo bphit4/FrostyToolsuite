@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="520"
+             x:Class="FrostyEditor.Views.LegacyAssetDocumentView"
+             x:DataType="viewModels:LegacyAssetDocumentViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBox.metadata-value">
+      <Setter Property="IsReadOnly" Value="True"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0,2,0,0"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="MinHeight" Value="24"/>
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,*">
+    <StackPanel Margin="0,0,0,10">
+      <TextBlock Text="{Binding Header}" FontSize="20" FontWeight="Bold"/>
+      <TextBox Classes="metadata-value subtle" Text="{Binding FullName}"/>
+    </StackPanel>
+
+    <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,10">
+      <Border Classes="panel" Margin="0,0,6,0" Padding="8">
+        <StackPanel>
+          <TextBlock Text="Type" Classes="subtle"/>
+          <TextBlock Text="{Binding Type}" FontWeight="SemiBold"/>
+        </StackPanel>
+      </Border>
+      <Border Classes="panel" Margin="6,0" Padding="8">
+        <StackPanel>
+          <TextBlock Text="Path" Classes="subtle"/>
+          <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+      </Border>
+      <Border Classes="panel" Margin="6,0" Padding="8">
+        <StackPanel>
+          <TextBlock Text="Size" Classes="subtle"/>
+          <TextBlock Text="{Binding SizeText}" FontWeight="SemiBold"/>
+        </StackPanel>
+      </Border>
+      <Border Classes="panel" Margin="6,0,0,0" Padding="8">
+        <StackPanel>
+          <TextBlock Text="Collectors" Classes="subtle"/>
+          <TextBlock Text="{Binding InstanceCountText}" FontWeight="SemiBold"/>
+        </StackPanel>
+      </Border>
+    </UniformGrid>
+
+    <Border Grid.Row="2" Classes="panel" Padding="12">
+      <Grid RowDefinitions="Auto,Auto,*">
+        <TextBlock Text="{Binding PreviewTitle}" Classes="section-title"/>
+        <TextBlock Grid.Row="1" Text="{Binding Summary}" Classes="subtle" Margin="0,4,0,10" TextWrapping="Wrap"/>
+        <TextBox Grid.Row="2"
+                 Text="{Binding PreviewText}"
+                 AcceptsReturn="True"
+                 IsReadOnly="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Consolas, Cascadia Mono, Courier New"/>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

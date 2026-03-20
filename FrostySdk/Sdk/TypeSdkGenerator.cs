@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -23,54 +24,92 @@ namespace Frosty.Sdk.Sdk;
 
 public class TypeSdkGenerator
 {
+    private const string c_missingTypeInfoMessage =
+        "No readable TypeInfo signature was found. This usually means the game's current build no longer matches the profile signature.";
+    private static readonly string[] s_fallbackPatterns =
+    [
+        "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ?? C3",
+        "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ??",
+        "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ?? 48 ?? ?? C3",
+        "48 8b 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? 48 8d 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? E9",
+        "48 39 1D ?? ?? ?? ?? ?? ?? 48 8b 43 10",
+        "48 39 0D ?? ?? ?? ?? ?? ?? 48 8b 41 10 48 89 05 ?? ?? ?? ?? 48"
+    ];
+
     private long FindTypeInfoOffset(MemoryReader reader)
     {
-        nint offset = nint.Zero;
-
+        List<string> patterns = new();
         if (!string.IsNullOrEmpty(ProfilesLibrary.TypeInfoSignature))
         {
-            offset = reader.ScanPatter(ProfilesLibrary.TypeInfoSignature);
+            patterns.Add(ProfilesLibrary.TypeInfoSignature);
         }
-        else
+
+        foreach (string pattern in s_fallbackPatterns)
         {
-            // TODO: remove this once all games have their correct pattern
-            string[] patterns =
+            if (!patterns.Contains(pattern, StringComparer.OrdinalIgnoreCase))
             {
-                "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ?? C3",
-                "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ??",
-                "48 8b 05 ?? ?? ?? ?? 48 89 41 08 48 89 0d ?? ?? ?? ?? 48 ?? ?? C3",
-                "48 8b 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? 48 8d 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? E9",
-                "48 39 1D ?? ?? ?? ?? ?? ?? 48 8b 43 10", // new games
-            };
-            foreach (string sig in patterns)
-            {
-                offset = reader.ScanPatter(sig);
-                if (offset != nint.Zero)
-                {
-                    FrostyLogger.Logger?.LogInfo($"No TypeInfoSig set, found offset for \"{sig}\"");
-                    break;
-                }
+                patterns.Add(pattern);
             }
         }
 
-        if (offset == nint.Zero)
+        foreach (string sig in patterns)
         {
-            return -1;
+            nint offset = reader.ScanPatternInMainModule(sig);
+            if (offset == nint.Zero)
+            {
+                offset = reader.ScanPatternFromMainModuleBase(sig);
+            }
+            if (offset == nint.Zero)
+            {
+                offset = reader.ScanPatter(sig);
+            }
+
+            if (offset == nint.Zero)
+            {
+                continue;
+            }
+
+            if (!sig.Equals(ProfilesLibrary.TypeInfoSignature, StringComparison.OrdinalIgnoreCase))
+            {
+                FrostyLogger.Logger?.LogInfo($"Using fallback TypeInfo signature \"{sig}\"");
+            }
+
+            FrostyLogger.Logger?.LogInfo($"Matched TypeInfo signature at 0x{offset:X}");
+
+            try
+            {
+                reader.Position = offset + 3;
+                int newValue = reader.ReadInt(false);
+                reader.Position = offset + 3 + newValue + 4;
+                return reader.ReadLong(false);
+            }
+            catch (Exception ex) when (ex is Win32Exception or EndOfStreamException)
+            {
+                FrostyLogger.Logger?.LogWarning(
+                    $"Matched TypeInfo signature at 0x{offset:X}, but Frosty could not read the referenced pointer. " +
+                    "This is often a stale signature after a game update.");
+            }
         }
 
-        reader.Position = offset + 3;
-        int newValue = reader.ReadInt(false);
-        reader.Position = offset + 3 + newValue + 4;
-        return reader.ReadLong(false);
+        if (reader.LastPatternScanPartialReadCount > 0 || reader.LastPatternScanSkippedRegionCount > 0)
+        {
+            FrostyLogger.Logger?.LogWarning(
+                $"The memory scan skipped {reader.LastPatternScanSkippedRegionCount} unreadable region(s) and encountered " +
+                $"{reader.LastPatternScanPartialReadCount} partial read(s) while searching {reader.LastPatternScanRegionCount} region(s).");
+        }
+
+        return -1;
     }
 
     public bool DumpTypes(Process process)
     {
-        MemoryReader reader = new(process);
+        using MemoryReader reader = new(process);
         long typeInfoOffset = FindTypeInfoOffset(reader);
         if (typeInfoOffset == -1)
         {
-            FrostyLogger.Logger?.LogError("No offset found for TypeInfo, maybe try a different TypeInfoSignature");
+            FrostyLogger.Logger?.LogError(c_missingTypeInfoMessage);
+            FrostyLogger.Logger?.LogError(
+                $"Profile '{ProfilesLibrary.ProfileName}' may need an updated TypeInfoSignature for the current {process.ProcessName} build.");
             return false;
         }
 

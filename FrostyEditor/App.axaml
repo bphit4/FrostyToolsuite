@@ -2,24 +2,178 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="FrostyEditor.App"
              xmlns:local="using:FrostyEditor"
-             RequestedThemeVariant="Default">
-  <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
-  
+             RequestedThemeVariant="Dark">
   <Application.DataTemplates>
     <local:ViewLocator/>
   </Application.DataTemplates>
-  
+
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://Avalonia.Controls.TreeDataGrid/Themes/Fluent.axaml"/>
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="Foreground" Value="#E8E8E8"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Visible"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+    </Style>
+
+    <Style Selector="Border.surface">
+      <Setter Property="Background" Value="#252526"/>
+      <Setter Property="BorderBrush" Value="#3B3B3B"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="#2D2D30"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="3"/>
+    </Style>
+
+    <Style Selector="TextBlock.section-title">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#F2F2F2"/>
+    </Style>
+
+    <Style Selector="TextBlock.subtle">
+      <Setter Property="Foreground" Value="#B8B8B8"/>
+      <Setter Property="FontSize" Value="11.5"/>
+    </Style>
+
+    <Style Selector="Button.toolbar">
+      <Setter Property="Padding" Value="9,3"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Background" Value="#2D2D30"/>
+      <Setter Property="BorderBrush" Value="#4A4A4A"/>
+      <Setter Property="Foreground" Value="#F1F1F1"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#007ACC"/>
+      <Setter Property="BorderBrush" Value="#2893E9"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+
+    <Style Selector="TextBox.search-box">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="Foreground" Value="#F8F8F8"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="Menu">
+      <Setter Property="Background" Value="#252526"/>
+      <Setter Property="Foreground" Value="#F1F1F1"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="MenuItem">
+      <Setter Property="Foreground" Value="#F1F1F1"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Padding" Value="10,4"/>
+    </Style>
+
+    <Style Selector="MenuItem /template/ ContentPresenter">
+      <Setter Property="TextElement.Foreground" Value="#F1F1F1"/>
+    </Style>
+
+    <Style Selector="TabControl">
+      <Setter Property="Background" Value="#252526"/>
+    </Style>
+
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="11.5"/>
+    </Style>
+
+    <Style Selector="TreeView">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <Style Selector="TreeViewItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="18"/>
+    </Style>
+
+    <Style Selector="TreeDataGrid">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="FontSize" Value="11.5"/>
+    </Style>
+
+    <Style Selector="TreeDataGridRow">
+      <Setter Property="MinHeight" Value="20"/>
+    </Style>
+
+    <Style Selector="TreeDataGridCell">
+      <Setter Property="Padding" Value="2,0"/>
+    </Style>
+
+    <Style Selector="TreeDataGrid ToggleButton">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinWidth" Value="16"/>
+      <Setter Property="MinHeight" Value="16"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="Transparent"
+                  Width="16"
+                  Height="16">
+            <Path x:Name="ExpandPath"
+                  Width="7"
+                  Height="7"
+                  Fill="#DADADA"
+                  Stretch="Uniform"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Data="M0,0 L0,6 L6,3 Z"
+                  RenderTransformOrigin="0.5,0.5">
+              <Path.RenderTransform>
+                <RotateTransform Angle="0"/>
+              </Path.RenderTransform>
+            </Path>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="TreeDataGrid ToggleButton:checked /template/ Path#ExpandPath">
+      <Setter Property="RenderTransform">
+        <RotateTransform Angle="90"/>
+      </Setter>
+    </Style>
+
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="FontSize" Value="11.5"/>
+    </Style>
   </Application.Styles>
-  
+
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source='/Languages/Languages.axaml'/>
         <ResourceInclude Source='/Languages/en-US.axaml'/>
       </ResourceDictionary.MergedDictionaries>
+
+      <Color x:Key="FrostyBlue">#007ACC</Color>
+      <Color x:Key="FrostySurface">#252526</Color>
+      <SolidColorBrush x:Key="FrostyBlueBrush" Color="{StaticResource FrostyBlue}"/>
+      <SolidColorBrush x:Key="FrostySurfaceBrush" Color="{StaticResource FrostySurface}"/>
     </ResourceDictionary>
   </Application.Resources>
 </Application>

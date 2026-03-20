@@ -45,6 +45,7 @@ public static class ObjectExtensions
         if (value is IPrimitive primitive && primitive.ToActualType() is T result2)
         {
             result = result2;
+            return true;
         }
 
         result = default;

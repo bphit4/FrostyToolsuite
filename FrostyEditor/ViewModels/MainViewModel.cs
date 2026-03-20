@@ -1,13 +1,27 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Frosty.Sdk;
+using FrostyEditor.Managers;
 using FrostyEditor.Models;
+using FrostyEditor.Utils;
+using FrostyEditor.Windows;
 
 namespace FrostyEditor.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
+    private string? m_currentProjectDirectory;
+    private string m_currentProjectName = "FrostyToolsuite Project";
+
     [ObservableProperty]
     private MenuViewModel m_menu = new();
 
@@ -17,7 +31,16 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private LoggerViewModel m_logger = new();
 
+    [ObservableProperty]
+    private DocumentModel? m_activeDocument;
+
     public ObservableCollection<DocumentModel> Documents { get; } = new();
+
+    public string WindowTitle => "Frosty Editor 2.0";
+    public string WindowSubtitle => "Modern Avalonia rewrite of the M24 editor shell";
+    public string DocumentStatus => $"{Documents.Count} open document(s)";
+    public string ActiveDocumentTitle => ActiveDocument?.Header ?? "Home Page";
+    public string BuildStatus => Logger.LastEntry ?? "Ready";
 
     public MainViewModel()
     {
@@ -27,25 +50,329 @@ public partial class MainViewModel : ViewModelBase
         }
 
         App.MainViewModel = this;
-        AddTabItem("Start Page", "Nothing here yet, please someone implement a PropertyGrid");
+        AddStartPage();
 
         if (FrostyLogger.Logger is LoggerViewModel logger)
         {
             Logger = logger;
         }
+
+        Logger.LogInfo("Editor shell initialized.");
     }
 
     public void AddEditor(AssetEditorViewModel inEditor)
     {
-        AddTabItem(inEditor.Header, inEditor);
+        AddTabItem(inEditor.DocumentKey, inEditor.Header, inEditor.Path, inEditor);
     }
 
-    private void AddTabItem(string inHeader, object? inContent)
+    public void AddDocument(string key, string header, string? description, object content)
     {
-        Documents.Add(new DocumentModel()
+        AddTabItem(key, header, description, content);
+    }
+
+    public bool ActivateDocumentByKey(string key)
+    {
+        DocumentModel? existing = Documents.FirstOrDefault(doc =>
+            string.Equals(doc.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
         {
-            Header = inHeader,
-            Content = inContent,
+            return false;
+        }
+
+        ActiveDocument = existing;
+        OnPropertyChanged(nameof(DocumentStatus));
+        OnPropertyChanged(nameof(ActiveDocumentTitle));
+        return true;
+    }
+
+    public bool RefreshDocumentByKey(string key)
+    {
+        DocumentModel? existing = Documents.FirstOrDefault(doc =>
+            string.Equals(doc.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (existing?.Content is not IReloadableDocument reloadable)
+        {
+            return false;
+        }
+
+        reloadable.ReloadFromSource();
+        return true;
+    }
+
+    [RelayCommand]
+    private void NewProject()
+    {
+        ProjectPersistenceManager.ResetSession();
+        m_currentProjectDirectory = null;
+        m_currentProjectName = "FrostyToolsuite Project";
+        ReloadOpenDocumentsFromSource();
+        RefreshOpenDocumentSessionState();
+        DataExplorer.RefreshExplorerState();
+        Logger.LogInfo("Started a new project session.");
+    }
+
+    [RelayCommand]
+    private async Task OpenProject()
+    {
+        IReadOnlyList<IStorageFolder>? folders = await FileService.OpenFoldersAsync(new FolderPickerOpenOptions
+        {
+            Title = "Open Project Folder",
+            AllowMultiple = false
         });
+
+        IStorageFolder? folder = folders?.FirstOrDefault();
+        if (folder is null)
+        {
+            return;
+        }
+
+        ProjectOperationResult result = ProjectPersistenceManager.LoadProject(folder.Path.LocalPath);
+        if (!result.Success)
+        {
+            Logger.LogWarning(result.Message);
+            return;
+        }
+
+        m_currentProjectDirectory = result.Path;
+        m_currentProjectName = Path.GetFileName(result.Path) ?? "FrostyToolsuite Project";
+        ReloadOpenDocumentsFromSource();
+        RefreshOpenDocumentSessionState();
+        DataExplorer.RefreshExplorerState();
+        Logger.LogInfo(result.Message);
+    }
+
+    [RelayCommand]
+    private async Task SaveProject()
+    {
+        if (string.IsNullOrWhiteSpace(m_currentProjectDirectory))
+        {
+            await SaveProjectAs();
+            return;
+        }
+
+        ProjectOperationResult result = ProjectPersistenceManager.SaveProject(m_currentProjectDirectory, m_currentProjectName);
+        if (!result.Success)
+        {
+            Logger.LogWarning(result.Message);
+            return;
+        }
+
+        RefreshOpenDocumentSessionState();
+        DataExplorer.RefreshExplorerState();
+        Logger.LogInfo(result.Message);
+    }
+
+    [RelayCommand]
+    private async Task SaveProjectAs()
+    {
+        IReadOnlyList<IStorageFolder>? folders = await FileService.OpenFoldersAsync(new FolderPickerOpenOptions
+        {
+            Title = "Save Project Folder",
+            AllowMultiple = false
+        });
+
+        IStorageFolder? folder = folders?.FirstOrDefault();
+        if (folder is null)
+        {
+            return;
+        }
+
+        ProjectOperationResult result = ProjectPersistenceManager.SaveProject(folder.Path.LocalPath, Path.GetFileName(folder.Path.LocalPath));
+        if (!result.Success)
+        {
+            Logger.LogWarning(result.Message);
+            return;
+        }
+
+        m_currentProjectDirectory = result.Path;
+        m_currentProjectName = Path.GetFileName(result.Path) ?? "FrostyToolsuite Project";
+        RefreshOpenDocumentSessionState();
+        DataExplorer.RefreshExplorerState();
+        Logger.LogInfo(result.Message);
+    }
+
+    [RelayCommand]
+    private async Task ExportMod()
+    {
+        IStorageFile? file = await FileService.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Mod",
+            SuggestedFileName = $"{m_currentProjectName}.fbmod",
+            DefaultExtension = "fbmod",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Frosty Mod (*.fbmod)") { Patterns = ["*.fbmod"] }
+            ]
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        ProjectOperationResult result = ProjectPersistenceManager.ExportMod(file.Path.LocalPath, m_currentProjectName);
+        if (!result.Success)
+        {
+            Logger.LogWarning(result.Message);
+            return;
+        }
+
+        Logger.LogInfo(result.Message);
+    }
+
+    [RelayCommand]
+    private void Launch()
+    {
+        Logger.LogInfo("Launch UI is wired in, but the mod-launch pipeline is intentionally not ported in this pass.");
+    }
+
+    [RelayCommand]
+    private void OpenAbout()
+    {
+        Logger.LogInfo("Frosty Editor 2.0 is running on Avalonia with the M24 shell rebuilt.");
+    }
+
+    [RelayCommand]
+    private void CloseActiveDocument()
+    {
+        if (ActiveDocument is null || Documents.Count == 0)
+        {
+            return;
+        }
+
+        CloseDocument(ActiveDocument);
+    }
+
+    [RelayCommand]
+    private void CloseAllDocuments()
+    {
+        Documents.Clear();
+        Logger.LogInfo("Closed all open tabs.");
+        AddStartPage();
+    }
+
+    [RelayCommand]
+    private void ExitApplication()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
+        }
+    }
+
+    [RelayCommand]
+    private void ResetWindowSettings()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+            desktop.MainWindow is MainWindow window)
+        {
+            window.ResetWindowSettings();
+            Logger.LogInfo("Window settings reset to defaults.");
+        }
+    }
+
+    partial void OnActiveDocumentChanged(DocumentModel? value)
+    {
+        foreach (DocumentModel document in Documents)
+        {
+            document.IsActive = ReferenceEquals(document, value);
+        }
+
+        OnPropertyChanged(nameof(ActiveDocumentTitle));
+    }
+
+    public void CloseDocument(DocumentModel? document)
+    {
+        if (document is null || Documents.Count == 0)
+        {
+            return;
+        }
+
+        int index = Documents.IndexOf(document);
+        if (index < 0)
+        {
+            return;
+        }
+
+        Documents.RemoveAt(index);
+        Logger.LogInfo($"Closed tab '{document.Header}'.");
+
+        if (Documents.Count == 0)
+        {
+            AddStartPage();
+            return;
+        }
+
+        ActiveDocument = Documents[Math.Clamp(index - 1, 0, Documents.Count - 1)];
+        OnPropertyChanged(nameof(DocumentStatus));
+        OnPropertyChanged(nameof(ActiveDocumentTitle));
+    }
+
+    private void AddStartPage()
+    {
+        AddTabItem(
+            "home-page",
+            "Home Page",
+            "Convenient links, current work, and shell updates.",
+            new HomePageContent());
+    }
+
+    private void AddTabItem(string inKey, string inHeader, string? inDescription, object? inContent)
+    {
+        DocumentModel? existing = Documents.FirstOrDefault(doc =>
+            string.Equals(doc.Key, inKey, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            ActiveDocument = existing;
+            OnPropertyChanged(nameof(DocumentStatus));
+            OnPropertyChanged(nameof(ActiveDocumentTitle));
+            return;
+        }
+
+        DocumentModel model = new()
+        {
+            Key = inKey,
+            Header = inHeader,
+            Description = inDescription,
+            Content = inContent
+        };
+
+        model.CloseCommand = new RelayCommand(() => CloseDocument(model));
+        model.ActivateCommand = new RelayCommand(() => ActiveDocument = model);
+
+        Documents.Add(model);
+        ActiveDocument = model;
+
+        OnPropertyChanged(nameof(DocumentStatus));
+        OnPropertyChanged(nameof(ActiveDocumentTitle));
+    }
+
+    private void AddTabItem(string inKey, string inHeader, string inLead, string inBody)
+    {
+        AddTabItem(inKey, inHeader, inLead, new TextDocumentContent
+        {
+            Text = $"{inLead}{Environment.NewLine}{Environment.NewLine}{inBody}"
+        });
+    }
+
+    private void RefreshOpenDocumentSessionState()
+    {
+        foreach (DocumentModel document in Documents)
+        {
+            if (document.Content is ISessionStateAwareDocument sessionAware)
+            {
+                sessionAware.RefreshSessionState();
+            }
+        }
+    }
+
+    private void ReloadOpenDocumentsFromSource()
+    {
+        foreach (DocumentModel document in Documents)
+        {
+            if (document.Content is IReloadableDocument reloadable)
+            {
+                reloadable.ReloadFromSource();
+            }
+        }
     }
 }

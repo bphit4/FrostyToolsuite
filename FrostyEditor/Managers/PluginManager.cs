@@ -11,12 +11,25 @@ public static class PluginManager
 
     public static AssetEditorViewModel GetEbxAssetEditor(EbxAssetEntry entry)
     {
+        if (IsTextureAsset(entry.Type))
+        {
+            return new TextureAssetEditorViewModel(entry);
+        }
+
         if (s_ebxAssetEditors.TryGetValue(entry.Type.ToLower(), out Type? type) &&
             Activator.CreateInstance(type, entry) is AssetEditorViewModel editor)
         {
             return editor;
         }
 
-        return new AssetEditorViewModel(entry);
+        return new EbxAssetEditorViewModel(entry);
+    }
+
+    private static bool IsTextureAsset(string type)
+    {
+        return type.Equals("TextureAsset", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("TextureArrayAsset", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("ImageLibraryTexture", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("MovieTextureAsset", StringComparison.OrdinalIgnoreCase);
     }
 }

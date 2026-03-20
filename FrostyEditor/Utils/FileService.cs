@@ -42,4 +42,21 @@ public static class FileService
 
         return await topLevel.StorageProvider.SaveFilePickerAsync(inOptions);
     }
+
+    /// <summary>
+    /// Opens folder picker dialog.
+    /// </summary>
+    /// <returns>Array of selected <see cref="IStorageFolder"/> or empty collection if user canceled the dialog or null if no MainWindow was found.</returns>
+    public static async Task<IReadOnlyList<IStorageFolder>?> OpenFoldersAsync(FolderPickerOpenOptions inOptions)
+    {
+        TopLevel? topLevel = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+            ?.MainWindow;
+
+        if (topLevel is null)
+        {
+            return null;
+        }
+
+        return await topLevel.StorageProvider.OpenFolderPickerAsync(inOptions);
+    }
 }

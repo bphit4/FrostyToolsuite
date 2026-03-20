@@ -15,8 +15,20 @@ namespace Frosty.Sdk.IO.RiffEbx;
 
 public class EbxWriter : BaseEbxWriter
 {
+    private static readonly Dictionary<Tuple<Guid, uint>, EbxExtra> s_arrayExtraCache = new();
+
     private readonly List<EbxExtra> m_arrays = new();
     private readonly List<EbxExtra> m_boxedValues = new();
+
+    internal static void SetArrayExtra(Guid inPartitionGuid, EbxExtra inArray)
+    {
+        s_arrayExtraCache[Tuple.Create(inPartitionGuid, inArray.Offset)] = inArray;
+    }
+
+    private static bool TryGetArrayExtra(Guid inPartitionGuid, uint inOffset, out EbxExtra outArray)
+    {
+        return s_arrayExtraCache.TryGetValue(Tuple.Create(inPartitionGuid, inOffset), out outArray);
+    }
 
     private readonly EbxTypeResolver m_typeResolver;
 
@@ -31,8 +43,8 @@ public class EbxWriter : BaseEbxWriter
         ReadOnly = 1 << 15
     }
 
-    public EbxWriter(DataStream inStream)
-        : base(inStream)
+    public EbxWriter(DataStream inStream, EbxWriteFlags inFlags = EbxWriteFlags.None)
+        : base(inStream, inFlags)
     {
         m_fixup = new()
         {
@@ -231,6 +243,11 @@ public class EbxWriter : BaseEbxWriter
                     writer.WriteInt32(array.Count);
 
                     array.Offset = (uint)writer.Position;
+                    if (TryGetArrayExtra(m_fixup.PartitionGuid, array.Offset, out EbxExtra cachedArray))
+                    {
+                        array.Hash = cachedArray.Hash;
+                        array.Flags = cachedArray.Flags;
+                    }
                     writer.Write(m_arrayData[i]);
                     m_arrayData[i].Dispose();
                     m_arrays[i] = array;
@@ -987,3 +1004,4 @@ public class EbxWriter : BaseEbxWriter
         writer.StepOut();
     }
 }
+

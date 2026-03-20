@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Frosty.Sdk.Attributes;
 using Frosty.Sdk.Interfaces;
@@ -12,6 +13,8 @@ namespace Frosty.Sdk;
 
 public static class TypeLibrary
 {
+    private const int c_typeInfoAssetFlag = 1 << 31;
+
     public static bool IsInitialized { get; private set; }
 
     private static readonly Dictionary<string, int> s_nameMapping = new();
@@ -94,23 +97,7 @@ public static class TypeLibrary
     public static void AddTypeInfoAsset(Guid inGuid, object inTypeInfoAsset)
     {
         TypeInfoAsset type = new(inGuid, inTypeInfoAsset);
-
-        const int flag = 1 << 31;
-        int index = s_typeInfoAssets.Count | flag;
-
-        if (!string.IsNullOrEmpty(type.Name))
-        {
-            s_nameMapping.Add(type.Name, index);
-        }
-
-        s_guidMapping.Add(type.Guid, index);
-
-        if (type.NameHash != uint.MaxValue)
-        {
-            s_nameHashMapping.Add(type.NameHash, index);
-        }
-
-        s_typeInfoAssets.Add(type);
+        RegisterTypeInfoAsset(type, logDuplicates: true);
     }
 
     public static IEnumerable<IType> EnumerateTypes() => s_types;
@@ -246,23 +233,71 @@ public static class TypeLibrary
         for (int i = 0; i < count; i++)
         {
             TypeInfoAsset type = new(inStream.ReadNullTerminatedString(), inStream.ReadUInt32(), inStream.ReadGuid());
-            const int flag = 1 << 31;
-            int index = s_typeInfoAssets.Count | flag;
-
-            if (!string.IsNullOrEmpty(type.Name))
-            {
-                s_nameMapping.Add(type.Name, index);
-            }
-
-            s_guidMapping.Add(type.Guid, index);
-
-            if (type.NameHash != uint.MaxValue)
-            {
-                s_nameHashMapping.Add(type.NameHash, index);
-            }
-
-            s_typeInfoAssets.Add(type);
+            RegisterTypeInfoAsset(type, logDuplicates: false);
         }
+    }
+
+    internal static void ResetTypeInfoAssets()
+    {
+        if (s_typeInfoAssets.Count == 0)
+        {
+            return;
+        }
+
+        foreach (string key in s_nameMapping.Where(static kv => (kv.Value & c_typeInfoAssetFlag) != 0).Select(static kv => kv.Key).ToArray())
+        {
+            s_nameMapping.Remove(key);
+        }
+
+        foreach (uint key in s_nameHashMapping.Where(static kv => (kv.Value & c_typeInfoAssetFlag) != 0).Select(static kv => kv.Key).ToArray())
+        {
+            s_nameHashMapping.Remove(key);
+        }
+
+        foreach (Guid key in s_guidMapping.Where(static kv => (kv.Value & c_typeInfoAssetFlag) != 0).Select(static kv => kv.Key).ToArray())
+        {
+            s_guidMapping.Remove(key);
+        }
+
+        s_typeInfoAssets.Clear();
+    }
+
+    private static void RegisterTypeInfoAsset(TypeInfoAsset type, bool logDuplicates)
+    {
+        if (s_guidMapping.TryGetValue(type.Guid, out int existingGuidIndex) && (existingGuidIndex & c_typeInfoAssetFlag) != 0)
+        {
+            if (logDuplicates)
+            {
+                FrostyLogger.Logger?.LogWarning(
+                    $"Skipping duplicate TypeInfoAsset guid {type.Guid} for \"{type.Name}\" because it was already indexed.");
+            }
+
+            return;
+        }
+
+        int index = s_typeInfoAssets.Count | c_typeInfoAssetFlag;
+
+        if (!string.IsNullOrEmpty(type.Name))
+        {
+            if (!s_nameMapping.TryAdd(type.Name, index) && logDuplicates)
+            {
+                FrostyLogger.Logger?.LogWarning(
+                    $"Keeping existing runtime type mapping for \"{type.Name}\" and skipping duplicate name registration for guid {type.Guid}.");
+            }
+        }
+
+        s_guidMapping[type.Guid] = index;
+
+        if (type.NameHash != uint.MaxValue)
+        {
+            if (!s_nameHashMapping.TryAdd(type.NameHash, index) && logDuplicates)
+            {
+                FrostyLogger.Logger?.LogWarning(
+                    $"Keeping existing runtime type hash mapping for 0x{type.NameHash:X8} (\"{type.Name}\") and skipping duplicate hash registration.");
+            }
+        }
+
+        s_typeInfoAssets.Add(type);
     }
 
     internal static void WriteCache(DataStream inStream)

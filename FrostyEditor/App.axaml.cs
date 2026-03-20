@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -19,13 +20,18 @@ public partial class App : Application
     {
         AvaloniaXamlLoader.Load(this);
         Config.Load(ConfigPath);
+        TextBoxContextMenuHelper.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            desktop.Startup += (_, _) => Debug.WriteLine("App startup");
+            desktop.Exit += (_, _) => Debug.WriteLine("App exit");
+
             desktop.MainWindow = ViewWindow.Create<ProfileSelectViewModel>();
+            Debug.WriteLine($"MainWindow assigned: {desktop.MainWindow.GetType().Name}");
         }
 
         base.OnFrameworkInitializationCompleted();

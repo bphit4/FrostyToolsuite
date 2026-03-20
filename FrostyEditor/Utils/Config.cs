@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Frosty.Sdk;
 
 namespace FrostyEditor.Utils;
@@ -314,7 +315,25 @@ public static class Config
     {
         s_current ??= new InternalConfig();
 
-        return s_current.TryGetValue(option, scope, profile ?? ProfilesLibrary.ProfileName, out object? value) ? (T?)Convert.ChangeType(value, typeof(T)) ?? defaultValue : defaultValue;
+        if (!s_current.TryGetValue(option, scope, profile ?? ProfilesLibrary.ProfileName, out object? value) || value is null)
+        {
+            return defaultValue;
+        }
+
+        if (value is JsonElement jsonElement)
+        {
+            try
+            {
+                T? deserialized = jsonElement.Deserialize<T>();
+                return deserialized ?? defaultValue;
+            }
+            catch (JsonException)
+            {
+                return defaultValue;
+            }
+        }
+
+        return (T?)Convert.ChangeType(value, typeof(T)) ?? defaultValue;
     }
 
 

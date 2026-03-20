@@ -7,23 +7,148 @@
              x:Class="FrostyEditor.Views.SdkUpdateView"
              x:DataType="viewModels:SdkUpdateViewModel"
              x:CompileBindings="True">
-  <Grid RowDefinitions="*, Auto">
-    <ListBox Grid.Row="0"
-             ItemsSource="{Binding RunningProcesses}"
-             SelectedItem="{Binding SelectedProcess, Mode=OneWayToSource}">
-      <ListBox.ItemTemplate>
-        <DataTemplate>
-          <TextBlock Text="{Binding ProcessName}" />
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-    <DockPanel Grid.Row="1">
-      <Button Content="Create"
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="20">
+    <StackPanel Spacing="8">
+      <TextBlock Text="Update Profile SDK"
+                 FontSize="22"
+                 FontWeight="SemiBold" />
+      <TextBlock Text="{Binding MissingSdkMessage}"
+                 Opacity="0.9" />
+      <TextBlock Text="{Binding LaunchInstructions}"
+                 TextWrapping="Wrap"
+                 Opacity="0.7" />
+    </StackPanel>
+
+    <Border Grid.Row="1"
+            Margin="0,16,0,16"
+            Padding="12"
+            CornerRadius="8"
+            Background="#161E2B"
+            BorderBrush="#2C3F57"
+            BorderThickness="1">
+      <TextBlock Text="{Binding StatusMessage}"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <Border Grid.Row="2"
+            Margin="0,0,0,16"
+            Padding="12"
+            CornerRadius="8"
+            Background="#0E1520"
+            BorderBrush="#2A3444"
+            BorderThickness="1">
+      <Grid RowDefinitions="Auto,Auto,Auto,*">
+        <ItemsControl ItemsSource="{Binding SdkSteps}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+                <TextBlock Text="{Binding StatePrefix}"
+                           FontFamily="Cascadia Mono,Consolas,monospace"
+                           Opacity="0.8"/>
+                <TextBlock Grid.Column="1"
+                           Margin="10,0,0,0"
+                           Text="{Binding DisplayName}"
+                           FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="2"
+                           Margin="10,0,0,0"
+                           Text="{Binding StatusMessage}"
+                           Opacity="0.7"
+                           IsVisible="{Binding HasStatusMessage}"/>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+          <TextBlock
+                     Text="{Binding Logger.LastEntry}"
+                     TextWrapping="Wrap"
+                     Opacity="0.85"
+                     Margin="0,6,0,0" />
+          <TextBlock Grid.Column="1"
+                     Margin="12,0,0,0"
+                     Text="{Binding Logger.ProgressPercentText}"
+                     Opacity="0.7"
+                     VerticalAlignment="Center"
+                     IsVisible="{Binding ShowActivityLog}" />
+        </Grid>
+        <ProgressBar Grid.Row="2"
+                     Margin="0,10,0,0"
+                     Minimum="0"
+                     Maximum="1"
+                     Value="{Binding Logger.ProgressValue}"
+                     IsIndeterminate="{Binding IsProgressIndeterminate}"
+                     Height="8"
+                     IsVisible="{Binding ShowActivityLog}" />
+        <TextBox Grid.Row="3"
+                 Margin="0,10,0,0"
+                 Text="{Binding Logger.Text}"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Cascadia Mono,Consolas,monospace"
+                 FontSize="11"
+                 MinHeight="90"
+                 MaxHeight="140"
+                 BorderBrush="#3F3F46"
+                 IsVisible="{Binding ShowActivityLog}"/>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="3" RowDefinitions="Auto,*" Margin="0,0,0,16">
+      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <TextBlock Text="Detected Game Processes"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="1"
+                Content="Refresh"
+                Command="{Binding RefreshProcessesCommand}" />
+      </Grid>
+
+      <Border Grid.Row="1"
+              CornerRadius="8"
+              BorderBrush="#2A3444"
+              BorderThickness="1"
+              Background="#0E1520">
+        <ListBox ItemsSource="{Binding DetectedProcesses}"
+                 SelectedItem="{Binding SelectedProcess}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="12">
+                <Grid RowDefinitions="Auto,Auto,Auto">
+                  <TextBlock Text="{Binding ProcessName}"
+                             FontSize="15"
+                             FontWeight="SemiBold" />
+                  <TextBlock Grid.Row="1"
+                             Margin="0,4,0,0"
+                             Text="{Binding DisplayPath}"
+                             Opacity="0.75"
+                             TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2"
+                             Margin="0,4,0,0"
+                             Text="{Binding WindowTitle}"
+                             Opacity="0.6"
+                             TextWrapping="Wrap" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Border>
+    </Grid>
+
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto">
+      <TextBlock Text="Only processes matching the selected profile are shown."
+                 VerticalAlignment="Center"
+                 Opacity="0.6" />
+      <Button Grid.Column="1"
+              Margin="0,0,8,0"
+              Content="Cancel"
+              Command="{Binding CancelCommand}" />
+      <Button Grid.Column="2"
+              Content="Create SDK"
               Command="{Binding CreateSdkCommand}"
-              DockPanel.Dock="Right" />
-      <Button Content="Refresh"
-              Command="{Binding RefreshProcessesCommand}"
-              DockPanel.Dock="Left" />
-    </DockPanel>
+              IsEnabled="{Binding CanCreateSdk}" />
+    </Grid>
   </Grid>
 </UserControl>

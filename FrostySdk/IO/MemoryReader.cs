@@ -13,13 +13,21 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Frosty.Sdk.IO;
 
-public sealed unsafe partial class MemoryReader
+public sealed unsafe partial class MemoryReader : IDisposable
 {
     #region -- Windows --
 
     private enum SystemErrorCode
     {
-        InvalidParameter = 0x57
+        InvalidParameter = 0x57,
+        PartialCopy = 0x12B
+    }
+
+    [Flags]
+    private enum ProcessAccessType
+    {
+        VmRead = 0x0010,
+        QueryInformation = 0x0400
     }
 
     [Flags]
@@ -38,6 +46,9 @@ public sealed unsafe partial class MemoryReader
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool ReadProcessMemory(SafeProcessHandle processHandle, nint address, nint bytes, nint size, out nint bytesReadCount);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial SafeProcessHandle OpenProcess(ProcessAccessType desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial nint VirtualQueryEx(SafeProcessHandle processHandle, nint address, out MemoryBasicInformation64 memoryInformation, nint size);
@@ -63,12 +74,41 @@ public sealed unsafe partial class MemoryReader
     #endregion
 
     public long Position { get; set; }
+    public int LastPatternScanRegionCount { get; private set; }
+    public int LastPatternScanSkippedRegionCount { get; private set; }
+    public int LastPatternScanPartialReadCount { get; private set; }
 
     private readonly Process m_process;
+    private readonly SafeProcessHandle m_processHandle;
+    private readonly bool m_ownsProcessHandle;
 
     public MemoryReader(Process inProcess)
     {
         m_process = inProcess;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            m_processHandle = OpenProcess(ProcessAccessType.VmRead | ProcessAccessType.QueryInformation, false, inProcess.Id);
+            if (!m_processHandle.IsInvalid)
+            {
+                m_ownsProcessHandle = true;
+                return;
+            }
+
+            m_processHandle.Dispose();
+        }
+
+        m_processHandle = inProcess.SafeHandle;
+    }
+
+    public void Dispose()
+    {
+        if (m_ownsProcessHandle)
+        {
+            m_processHandle.Dispose();
+        }
+
+        GC.SuppressFinalize(this);
     }
 
     public void Pad(int alignment)
@@ -227,15 +267,28 @@ public sealed unsafe partial class MemoryReader
     public nint ScanPatter(string pattern)
     {
         ConvertPatternToAob(pattern, out string mask, out Block<byte> currentAob);
+        LastPatternScanRegionCount = 0;
+        LastPatternScanSkippedRegionCount = 0;
+        LastPatternScanPartialReadCount = 0;
 
         foreach ((nint Address, int Size) region in GetRegions())
         {
+            LastPatternScanRegionCount++;
             Block<byte> regionBytes = new(region.Size);
+            if (!TryReadMemory(region.Address, regionBytes, out nint bytesRead))
+            {
+                regionBytes.Dispose();
+                LastPatternScanSkippedRegionCount++;
+                continue;
+            }
 
-            ReadMemory(region.Address, regionBytes, out nint _);
+            if (bytesRead < region.Size)
+            {
+                LastPatternScanPartialReadCount++;
+            }
 
-            int address;
-            if ((address = SearchPattern(regionBytes, 0, currentAob, mask)) != 0)
+            int address = SearchPattern(regionBytes, 0, (int)bytesRead, currentAob, mask);
+            if (address >= 0)
             {
                 currentAob.Dispose();
                 regionBytes.Dispose();
@@ -250,11 +303,123 @@ public sealed unsafe partial class MemoryReader
         return nint.Zero;
     }
 
-    private int SearchPattern(Block<byte> buffer, int initIndex, Block<byte> currentAob, string mask)
+    public nint ScanPatternInMainModule(string pattern, int chunkSize = 1024 * 1024)
     {
-        for (int i = initIndex; i < buffer.Size; ++i)
+        ConvertPatternToAob(pattern, out string mask, out Block<byte> currentAob);
+        LastPatternScanRegionCount = 0;
+        LastPatternScanSkippedRegionCount = 0;
+        LastPatternScanPartialReadCount = 0;
+
+        ProcessModule? mainModule = m_process.MainModule;
+        if (mainModule is null || mainModule.ModuleMemorySize <= 0)
         {
-            for (int x = 0; x < currentAob.Size && x + i < buffer.Size; x++)
+            currentAob.Dispose();
+            return nint.Zero;
+        }
+
+        nint moduleBase = mainModule.BaseAddress;
+        int moduleSize = mainModule.ModuleMemorySize;
+        int overlap = Math.Max(currentAob.Size - 1, 0);
+
+        for (int offset = 0; offset < moduleSize; offset += chunkSize)
+        {
+            int bytesToRead = Math.Min(chunkSize + overlap, moduleSize - offset);
+            if (bytesToRead <= 0)
+            {
+                break;
+            }
+
+            LastPatternScanRegionCount++;
+
+            Block<byte> chunkBytes = new(bytesToRead);
+            if (!TryReadMemory(moduleBase + offset, chunkBytes, out nint bytesRead))
+            {
+                chunkBytes.Dispose();
+                LastPatternScanSkippedRegionCount++;
+                continue;
+            }
+
+            if (bytesRead < bytesToRead)
+            {
+                LastPatternScanPartialReadCount++;
+            }
+
+            int address = SearchPattern(chunkBytes, 0, (int)bytesRead, currentAob, mask);
+            if (address >= 0)
+            {
+                currentAob.Dispose();
+                chunkBytes.Dispose();
+                return moduleBase + offset + address;
+            }
+
+            chunkBytes.Dispose();
+        }
+
+        currentAob.Dispose();
+        return nint.Zero;
+    }
+
+    public nint ScanPatternFromMainModuleBase(string pattern, int chunkSize = 1024 * 1024)
+    {
+        ConvertPatternToAob(pattern, out string mask, out Block<byte> currentAob);
+        LastPatternScanRegionCount = 0;
+        LastPatternScanSkippedRegionCount = 0;
+        LastPatternScanPartialReadCount = 0;
+
+        ProcessModule? mainModule = m_process.MainModule;
+        if (mainModule is null)
+        {
+            currentAob.Dispose();
+            return nint.Zero;
+        }
+
+        nint currentAddress = mainModule.BaseAddress;
+        int overlap = Math.Max(currentAob.Size - 1, 0);
+
+        while (true)
+        {
+            LastPatternScanRegionCount++;
+
+            Block<byte> chunkBytes = new(chunkSize + overlap);
+            if (!TryReadMemory(currentAddress, chunkBytes, out nint bytesRead))
+            {
+                chunkBytes.Dispose();
+                LastPatternScanSkippedRegionCount++;
+                break;
+            }
+
+            if (bytesRead < chunkSize + overlap)
+            {
+                LastPatternScanPartialReadCount++;
+            }
+
+            int address = SearchPattern(chunkBytes, 0, (int)bytesRead, currentAob, mask);
+            if (address >= 0)
+            {
+                currentAob.Dispose();
+                chunkBytes.Dispose();
+                return currentAddress + address;
+            }
+
+            chunkBytes.Dispose();
+            currentAddress += chunkSize;
+        }
+
+        currentAob.Dispose();
+        return nint.Zero;
+    }
+
+    private int SearchPattern(Block<byte> buffer, int initIndex, int bufferLength, Block<byte> currentAob, string mask)
+    {
+        int lastStartIndex = bufferLength - currentAob.Size;
+        if (lastStartIndex < initIndex)
+        {
+            return -1;
+        }
+
+        for (int i = initIndex; i <= lastStartIndex; i++)
+        {
+            for (int x = 0; x < currentAob.Size; x++)
             {
                 if (currentAob[x] != buffer[i + x] && mask[x] != '?')
                 {
@@ -264,7 +429,7 @@ public sealed unsafe partial class MemoryReader
             return i;
             end:;
         }
-        return 0;
+        return -1;
     }
 
     private void ConvertPatternToAob(string inPatternString, out string mask, out Block<byte> currentAob)
@@ -297,7 +462,7 @@ public sealed unsafe partial class MemoryReader
 
             while (true)
             {
-                if (VirtualQueryEx(m_process.SafeHandle, currentAddress, out MemoryBasicInformation64 region, Unsafe.SizeOf<MemoryBasicInformation64>()) == 0)
+                if (VirtualQueryEx(m_processHandle, currentAddress, out MemoryBasicInformation64 region, Unsafe.SizeOf<MemoryBasicInformation64>()) == 0)
                 {
                     if (Marshal.GetLastPInvokeError() == (int) SystemErrorCode.InvalidParameter)
                     {
@@ -338,23 +503,34 @@ public sealed unsafe partial class MemoryReader
 
     private void ReadMemory(nint inAddress, Block<byte> outData, out nint bytesRead)
     {
+        if (!TryReadMemory(inAddress, outData, out bytesRead))
+        {
+            throw new Win32Exception();
+        }
+    }
+
+    private bool TryReadMemory(nint inAddress, Block<byte> outData, out nint bytesRead)
+    {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            if (!ReadProcessMemory(m_process.SafeHandle, inAddress, (nint)outData.Ptr, outData.Size, out bytesRead))
+            bool success = ReadProcessMemory(m_processHandle, inAddress, (nint)outData.Ptr, outData.Size, out bytesRead);
+            if (!success && bytesRead == 0)
             {
-                throw new Win32Exception();
+                return false;
             }
-        }
-        else
-        {
-            iovec localIo = new() { iov_base = outData.Ptr, iov_len = (nuint)outData.Size };
-            iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Size };
 
-            if ((bytesRead = process_vm_readv(m_process.Id, &localIo, 1, &remoteIo, 1, 0)) == -1)
-            {
-                throw new Exception();
-            }
+            return true;
         }
+
+        iovec localIo = new() { iov_base = outData.Ptr, iov_len = (nuint)outData.Size };
+        iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Size };
+
+        if ((bytesRead = process_vm_readv(m_process.Id, &localIo, 1, &remoteIo, 1, 0)) == -1)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private void ReadMemory(nint inAddress, Span<byte> outData, out nint bytesRead)
@@ -363,7 +539,8 @@ public sealed unsafe partial class MemoryReader
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                if (!ReadProcessMemory(m_process.SafeHandle, inAddress, (nint)ptr, outData.Length, out bytesRead))
+                bool success = ReadProcessMemory(m_processHandle, inAddress, (nint)ptr, outData.Length, out bytesRead);
+                if (!success && bytesRead == 0)
                 {
                     throw new Win32Exception();
                 }

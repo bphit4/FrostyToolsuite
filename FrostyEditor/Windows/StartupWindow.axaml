@@ -6,6 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="FrostyEditor.Windows.StartupWindow"
         Title="StartupWindow"
+        Icon="/Assets/FrostyApp.ico"
         x:CompileBindings="True">
   <ContentControl>
     <viewModels:ProfileSelectViewModel />

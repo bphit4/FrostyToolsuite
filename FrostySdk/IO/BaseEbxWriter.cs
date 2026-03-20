@@ -16,6 +16,7 @@ public abstract class BaseEbxWriter
 {
     protected readonly DataStream m_stream;
     protected readonly List<IEbxInstance> m_sortedInstances = new();
+    protected readonly EbxWriteFlags m_flags;
 
     protected static readonly Type s_pointerType = typeof(PointerRef);
     protected static readonly Type s_dataContainerType = TypeLibrary.GetType("DataContainer")!.Type;
@@ -39,15 +40,16 @@ public abstract class BaseEbxWriter
 
     private readonly HashSet<object> m_processedObjects = new();
 
-    protected BaseEbxWriter(DataStream inStream)
+    protected BaseEbxWriter(DataStream inStream, EbxWriteFlags inFlags = EbxWriteFlags.None)
     {
         m_stream = inStream;
+        m_flags = inFlags;
         m_useSharedTypeDescriptors = FileSystemManager.HasFileInMemoryFs("SharedTypeDescriptors.ebx");
     }
 
-    public static BaseEbxWriter CreateWriter(DataStream inStream)
+    public static BaseEbxWriter CreateWriter(DataStream inStream, EbxWriteFlags inFlags = EbxWriteFlags.None)
     {
-        return ProfilesLibrary.EbxVersion == 6 ? new RiffEbx.EbxWriter(inStream) : new LegacyEbx.EbxWriter(inStream);
+        return ProfilesLibrary.EbxVersion == 6 ? new RiffEbx.EbxWriter(inStream, inFlags) : new LegacyEbx.EbxWriter(inStream, inFlags);
     }
 
     public void WritePartition(EbxPartition inPartition)
@@ -68,18 +70,27 @@ public abstract class BaseEbxWriter
         }
 
         int exportedInstanceCount = exportedInstances.Count;
-        exportedInstances.Sort((a, b) =>
+        if (!m_flags.HasFlag(EbxWriteFlags.DoNotSort))
         {
-        	AssetClassGuid guidA = a.GetInstanceGuid();
-        	AssetClassGuid guidB = b.GetInstanceGuid();
-        	if (guidA.ExportedGuid == inPartition.PrimaryInstanceGuid)
-        	{
-        		return 1;
-        	}
-        	return guidB.ExportedGuid == inPartition.PrimaryInstanceGuid ? -1 : guidA.ExportedGuid.CompareTo(guidB.ExportedGuid);
-        });
+            exportedInstances.Sort((a, b) =>
+            {
+                AssetClassGuid guidA = a.GetInstanceGuid();
+                AssetClassGuid guidB = b.GetInstanceGuid();
+                if (guidA.ExportedGuid == inPartition.PrimaryInstanceGuid)
+                {
+                    return -1;
+                }
 
-        internalInstances.Sort(CompareInstances);
+                if (guidB.ExportedGuid == inPartition.PrimaryInstanceGuid)
+                {
+                    return 1;
+                }
+
+                return guidA.ExportedGuid.CompareTo(guidB.ExportedGuid);
+            });
+
+            internalInstances.Sort(CompareInstances);
+        }
 
         m_sortedInstances.AddRange(exportedInstances);
         m_sortedInstances.AddRange(internalInstances);
@@ -252,3 +263,6 @@ public abstract class BaseEbxWriter
         return m_typeToDescriptor.GetValueOrDefault(hash, -1);
     }
 }
+
+
+

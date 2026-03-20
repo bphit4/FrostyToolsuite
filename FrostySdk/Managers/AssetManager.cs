@@ -20,17 +20,38 @@ namespace Frosty.Sdk.Managers;
 /// </summary>
 public static class AssetManager
 {
+    private readonly record struct ChunkRestoreState
+    {
+        public long OriginalSize { get; }
+        public uint LogicalOffset { get; }
+        public uint LogicalSize { get; }
+
+        public ChunkRestoreState(long inOriginalSize, uint inLogicalOffset, uint inLogicalSize)
+        {
+            OriginalSize = inOriginalSize;
+            LogicalOffset = inLogicalOffset;
+            LogicalSize = inLogicalSize;
+        }
+    }
+
     public static bool IsInitialized { get; private set; }
 
     private static readonly Dictionary<int, BundleInfo> s_bundleMapping = new();
 
     private static readonly Dictionary<string, EbxAssetEntry> s_ebxNameMapping = new();
     private static readonly Dictionary<Guid, EbxAssetEntry> s_ebxGuidMapping = new();
+    private static readonly Dictionary<string, byte[]> s_modifiedEbxData = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, long> s_originalEbxSizes = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, ResAssetEntry> s_resNameMapping = new();
     private static readonly Dictionary<ulong, ResAssetEntry> s_resRidMapping = new();
 
     private static readonly Dictionary<Guid, ChunkAssetEntry> s_chunkGuidMapping = new();
+    private static readonly Dictionary<ulong, byte[]> s_modifiedResData = new();
+    private static readonly Dictionary<ulong, byte[]> s_modifiedResMeta = new();
+    private static readonly Dictionary<Guid, byte[]> s_modifiedChunkData = new();
+    private static readonly Dictionary<ulong, long> s_originalResSizes = new();
+    private static readonly Dictionary<Guid, ChunkRestoreState> s_originalChunkStates = new();
 
     /// <summary>
     /// Cache Versions:
@@ -46,6 +67,25 @@ public static class AssetManager
     /// </summary>
     /// <param name="patchResult">The <see cref="PatchResult"/> that all the changes will get added to, if it is not null and a previous cache exists.</param>
     /// <returns>False if the initialization failed.</returns>
+    private static void ResetState()
+    {
+        IsInitialized = false;
+        TypeLibrary.ResetTypeInfoAssets();
+        s_bundleMapping.Clear();
+        s_ebxNameMapping.Clear();
+        s_ebxGuidMapping.Clear();
+        s_modifiedEbxData.Clear();
+        s_originalEbxSizes.Clear();
+        s_resNameMapping.Clear();
+        s_resRidMapping.Clear();
+        s_chunkGuidMapping.Clear();
+        s_modifiedResData.Clear();
+        s_modifiedResMeta.Clear();
+        s_modifiedChunkData.Clear();
+        s_originalResSizes.Clear();
+        s_originalChunkStates.Clear();
+    }
+
     public static bool Initialize(PatchResult? patchResult = null)
     {
         if (IsInitialized)
@@ -64,6 +104,8 @@ public static class AssetManager
             FrostyLogger.Logger?.LogError("ResourceManager not initialized yet");
             return false;
         }
+
+        ResetState();
 
         if (!ReadCache(out List<EbxAssetEntry> prePatchEbx, out List<ResAssetEntry> prePatchRes,
                 out List<ChunkAssetEntry> prePatchChunks))
@@ -295,15 +337,244 @@ public static class AssetManager
         using (BlockStream stream = new(GetAsset(entry)))
         {
             T retVal = new();
-            retVal.Deserialize(stream, entry.ResMeta);
+            ReadOnlySpan<byte> resMeta = s_modifiedResMeta.TryGetValue(entry.ResRid, out byte[]? modifiedMeta)
+                ? modifiedMeta
+                : entry.ResMeta;
+            retVal.Deserialize(stream, resMeta);
+
+            if (retVal is Texture texture && GetChunkAssetEntry(texture.ChunkId) is ChunkAssetEntry chunkEntry)
+            {
+                using Block<byte> chunkData = GetAsset(chunkEntry);
+                texture.SetData(chunkEntry.Id, chunkData.ToArray());
+            }
 
             return retVal;
         }
     }
 
+    public static byte[] GetResMeta(ResAssetEntry entry)
+    {
+        return s_modifiedResMeta.TryGetValue(entry.ResRid, out byte[]? modifiedMeta)
+            ? (byte[])modifiedMeta.Clone()
+            : (byte[])entry.ResMeta.Clone();
+    }
+
     public static Block<byte> GetAsset(AssetEntry entry)
     {
+        if (entry is EbxAssetEntry ebxEntry && s_modifiedEbxData.TryGetValue(ebxEntry.Name, out byte[]? modifiedEbx))
+        {
+            return new Block<byte>(modifiedEbx);
+        }
+
+        if (entry is ResAssetEntry resEntry && s_modifiedResData.TryGetValue(resEntry.ResRid, out byte[]? modifiedRes))
+        {
+            return new Block<byte>(modifiedRes);
+        }
+
+        if (entry is ChunkAssetEntry chunkEntry && s_modifiedChunkData.TryGetValue(chunkEntry.Id, out byte[]? modifiedChunk))
+        {
+            return new Block<byte>(modifiedChunk);
+        }
+
         return entry.FileInfo!.GetData((int)entry.OriginalSize);
+    }
+
+    public static bool ModifyEbx(EbxAssetEntry entry, EbxPartition partition)
+    {
+        using MemoryStream memoryStream = new();
+        using DataStream stream = new(memoryStream);
+        EbxPartition.Serialize(stream, partition, ProfilesLibrary.EbxVersion == 6 ? EbxWriteFlags.DoNotSort : EbxWriteFlags.None);
+        return ModifyEbx(entry, memoryStream.ToArray());
+    }
+
+    public static bool ModifyEbx(EbxAssetEntry entry, byte[] buffer)
+    {
+        if (!s_ebxNameMapping.TryGetValue(entry.Name, out EbxAssetEntry? mappedEntry))
+        {
+            return false;
+        }
+
+        if (!s_originalEbxSizes.ContainsKey(entry.Name))
+        {
+            s_originalEbxSizes[entry.Name] = mappedEntry.OriginalSize;
+        }
+
+        s_modifiedEbxData[entry.Name] = (byte[])buffer.Clone();
+        mappedEntry.OriginalSize = buffer.Length;
+        return true;
+    }
+
+    public static bool IsEbxModified(string name)
+    {
+        return !string.IsNullOrWhiteSpace(name) && s_modifiedEbxData.ContainsKey(name);
+    }
+
+    public static bool RevertEbx(string name)
+    {
+        if (!s_ebxNameMapping.TryGetValue(name, out EbxAssetEntry? entry))
+        {
+            return false;
+        }
+
+        bool changed = s_modifiedEbxData.Remove(name);
+        if (s_originalEbxSizes.Remove(name, out long originalSize))
+        {
+            entry.OriginalSize = originalSize;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    public static bool ModifyChunk(Guid chunkId, byte[] buffer)
+    {
+        if (!s_chunkGuidMapping.TryGetValue(chunkId, out ChunkAssetEntry? entry))
+        {
+            return false;
+        }
+
+        if (!s_originalChunkStates.ContainsKey(chunkId))
+        {
+            s_originalChunkStates[chunkId] = new ChunkRestoreState(entry.OriginalSize, entry.LogicalOffset, entry.LogicalSize);
+        }
+
+        s_modifiedChunkData[chunkId] = (byte[])buffer.Clone();
+        entry.OriginalSize = buffer.Length;
+        entry.LogicalSize = (uint)buffer.Length;
+        return true;
+    }
+
+    public static bool ModifyChunk(Guid chunkId, byte[] buffer, Texture? texture)
+    {
+        if (!ModifyChunk(chunkId, buffer))
+        {
+            return false;
+        }
+
+        if (texture is not null && s_chunkGuidMapping.TryGetValue(chunkId, out ChunkAssetEntry? entry))
+        {
+            entry.LogicalOffset = texture.LogicalOffset;
+            entry.LogicalSize = texture.LogicalSize;
+        }
+
+        return true;
+    }
+
+    public static void ModifyRes(ulong resRid, byte[] buffer, byte[]? meta = null)
+    {
+        if (!s_resRidMapping.TryGetValue(resRid, out ResAssetEntry? entry))
+        {
+            return;
+        }
+
+        if (!s_originalResSizes.ContainsKey(resRid))
+        {
+            s_originalResSizes[resRid] = entry.OriginalSize;
+        }
+
+        s_modifiedResData[resRid] = (byte[])buffer.Clone();
+        s_modifiedResMeta[resRid] = (byte[])(meta?.Clone() ?? entry.ResMeta.Clone());
+        entry.OriginalSize = buffer.Length;
+    }
+
+    public static void ModifyRes(ulong resRid, Resource resource)
+    {
+        if (!s_resRidMapping.TryGetValue(resRid, out ResAssetEntry? entry))
+        {
+            return;
+        }
+
+        byte[] meta = (byte[])entry.ResMeta.Clone();
+        using MemoryStream memoryStream = new();
+        using DataStream stream = new(memoryStream);
+        resource.Serialize(stream, meta);
+        ModifyRes(resRid, memoryStream.ToArray(), meta);
+    }
+
+    public static bool IsResModified(ulong resRid)
+    {
+        return s_modifiedResData.ContainsKey(resRid);
+    }
+
+    public static bool IsChunkModified(Guid chunkId)
+    {
+        return s_modifiedChunkData.ContainsKey(chunkId);
+    }
+
+    public static bool RevertRes(ulong resRid)
+    {
+        if (!s_resRidMapping.TryGetValue(resRid, out ResAssetEntry? entry))
+        {
+            return false;
+        }
+
+        bool changed = s_modifiedResData.Remove(resRid);
+        s_modifiedResMeta.Remove(resRid);
+
+        if (s_originalResSizes.Remove(resRid, out long originalSize))
+        {
+            entry.OriginalSize = originalSize;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    public static bool RevertChunk(Guid chunkId)
+    {
+        if (!s_chunkGuidMapping.TryGetValue(chunkId, out ChunkAssetEntry? entry))
+        {
+            return false;
+        }
+
+        bool changed = s_modifiedChunkData.Remove(chunkId);
+
+        if (s_originalChunkStates.Remove(chunkId, out ChunkRestoreState state))
+        {
+            entry.OriginalSize = state.OriginalSize;
+            entry.LogicalOffset = state.LogicalOffset;
+            entry.LogicalSize = state.LogicalSize;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    public static void ResetModifiedAssets()
+    {
+        foreach ((string name, long originalSize) in s_originalEbxSizes)
+        {
+            if (s_ebxNameMapping.TryGetValue(name, out EbxAssetEntry? entry))
+            {
+                entry.OriginalSize = originalSize;
+            }
+        }
+
+        foreach ((ulong resRid, long originalSize) in s_originalResSizes)
+        {
+            if (s_resRidMapping.TryGetValue(resRid, out ResAssetEntry? entry))
+            {
+                entry.OriginalSize = originalSize;
+            }
+        }
+
+        foreach ((Guid chunkId, ChunkRestoreState state) in s_originalChunkStates)
+        {
+            if (s_chunkGuidMapping.TryGetValue(chunkId, out ChunkAssetEntry? entry))
+            {
+                entry.OriginalSize = state.OriginalSize;
+                entry.LogicalOffset = state.LogicalOffset;
+                entry.LogicalSize = state.LogicalSize;
+            }
+        }
+
+        s_modifiedEbxData.Clear();
+        s_originalEbxSizes.Clear();
+        s_modifiedResData.Clear();
+        s_modifiedResMeta.Clear();
+        s_modifiedChunkData.Clear();
+        s_originalResSizes.Clear();
+        s_originalChunkStates.Clear();
     }
 
     public static Block<byte> GetRawAsset(AssetEntry entry)
@@ -351,18 +622,29 @@ public static class AssetManager
 
     internal static BundleInfo AddBundle(string name, SuperBundleInstallChunk sbIc)
     {
+        if (sbIc.BundleMapping.TryGetValue(name, out BundleInfo? existingBundle))
+        {
+            return existingBundle;
+        }
+
         BundleInfo bundle = new(name, sbIc);
-        bool success = s_bundleMapping.TryAdd(bundle.Id, bundle);
-        Debug.Assert(success, "fuck");
-        return bundle;
+        if (s_bundleMapping.TryAdd(bundle.Id, bundle))
+        {
+            return bundle;
+        }
+
+        FrostyLogger.Logger?.LogWarning($"Duplicate bundle \"{name}\" in superbundle \"{sbIc.Name}\". Reusing the existing bundle mapping.");
+        return s_bundleMapping[bundle.Id];
     }
 
     private static void UpdateBundle(string inName, BundleInfo inBundleInfo)
     {
         BundleInfo bundle = new(inName, inBundleInfo.Parent);
         s_bundleMapping.Remove(inBundleInfo.Id);
-        bool success = s_bundleMapping.TryAdd(bundle.Id, bundle);
-        Debug.Assert(success, "fuck");
+        if (!s_bundleMapping.TryAdd(bundle.Id, bundle))
+        {
+            FrostyLogger.Logger?.LogWarning($"Failed to remap bundle \"{inName}\" in superbundle \"{inBundleInfo.Parent.Name}\" because the target bundle id already exists.");
+        }
     }
 
     private static IAssetLoader GetAssetLoader()
@@ -839,3 +1121,4 @@ public static class AssetManager
 
     #endregion
 }
+

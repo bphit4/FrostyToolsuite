@@ -6,5 +6,33 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="FrostyEditor.Views.LoggerView"
              x:DataType="viewModels:LoggerViewModel">
-  <TextBlock Text="{Binding Text}"  />
+  <UserControl.Styles>
+    <Style Selector="TextBox#LoggerTextBox">
+      <Setter Property="Padding" Value="4,2"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="Foreground" Value="#F0F0F0"/>
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,*">
+    <DockPanel Margin="0,0,0,4">
+      <StackPanel DockPanel.Dock="Left">
+        <TextBlock Text="Output" Classes="section-title"/>
+        <TextBlock Text="{Binding LastEntry}" Classes="subtle" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
+      </StackPanel>
+      <TextBlock Text="{Binding EntryCount, StringFormat='{}{0} entries'}"
+                 HorizontalAlignment="Right"
+                 VerticalAlignment="Center"
+                 Foreground="{StaticResource FrostyBlueBrush}"/>
+    </DockPanel>
+    <TextBox x:Name="LoggerTextBox"
+             Grid.Row="1"
+             Text="{Binding Text}"
+             IsReadOnly="True"
+             AcceptsReturn="True"
+             TextWrapping="NoWrap"
+             FontFamily="Cascadia Mono,Consolas,monospace"
+             FontSize="11"
+             BorderBrush="#3F3F46"/>
+  </Grid>
 </UserControl>

@@ -71,9 +71,9 @@ public class EbxPartition
         return reader.ReadPartition<EbxPartition>();
     }
 
-    public static void Serialize(DataStream ebxStream, EbxPartition inPartition)
+    public static void Serialize(DataStream ebxStream, EbxPartition inPartition, IO.EbxWriteFlags inFlags = IO.EbxWriteFlags.None)
     {
-        BaseEbxWriter writer = BaseEbxWriter.CreateWriter(ebxStream);
+        BaseEbxWriter writer = BaseEbxWriter.CreateWriter(ebxStream, inFlags);
         writer.WritePartition(inPartition);
     }
 
@@ -147,3 +147,5 @@ public class EbxPartition
         instances.RemoveAt(idx);
     }
 }
+
+

@@ -1,0 +1,424 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             xmlns:models="clr-namespace:FrostyEditor.Models"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
+             x:Class="FrostyEditor.Views.EbxAssetEditorView"
+             x:Name="Root"
+             x:DataType="viewModels:EbxAssetEditorViewModel"
+             Tag="{Binding InspectorNameColumnWidth}">
+  <UserControl.Resources>
+    <DataTemplate x:Key="InspectorNodeTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid ColumnDefinitions="Auto,*"
+            Margin="0"
+            Height="18"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorRowPointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <MenuItem Header="Paste" Tag="paste" Click="OnPasteMenuItemClick"/>
+            <Separator Tag="expand-separator" IsVisible="False"/>
+            <MenuItem Header="Expand All One Level" Tag="expand-one-level" Click="OnExpandOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Expand All Levels" Tag="expand-all-levels" Click="OnExpandAllLevelsMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All One Level" Tag="collapse-one-level" Click="OnCollapseOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All Levels" Tag="collapse-all-levels" Click="OnCollapseAllLevelsMenuItemClick" IsVisible="False"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Border Width="{Binding Tag, ElementName=Root}"
+                Background="Transparent"
+                Padding="3,0"
+                Height="18">
+          <Grid ColumnDefinitions="16,*"
+                Margin="{Binding NameIndent}">
+            <Path Width="7"
+                  Height="7"
+                  Fill="#DADADA"
+                  Stretch="Uniform"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Data="{Binding ExpandGlyphData}"
+                  IsVisible="{Binding ShowExpandGlyph}"/>
+            <TextBlock Grid.Column="1"
+                       VerticalAlignment="Center"
+                       FontSize="10"
+                       LineHeight="12"
+                       FontWeight="{Binding NameFontWeight}"
+                       TextWrapping="NoWrap">
+              <Run Text="{Binding Name}"/>
+              <Run Text="{Binding NameSuffix}"/>
+            </TextBlock>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1"
+                Background="Transparent"
+                Padding="6,0,6,0"
+                Height="18"
+                ClipToBounds="True">
+          <Grid ColumnDefinitions="*,Auto">
+            <CheckBox IsVisible="{Binding IsBooleanVisible}"
+                      Classes="compact-checkbox"
+                      IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                      VerticalAlignment="Center"
+                      HorizontalAlignment="Left"
+                      Margin="0"
+                      Padding="0"/>
+            <StackPanel IsVisible="{Binding IsPointerDisplayVisible}"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        VerticalAlignment="Center">
+              <Button Width="14"
+                      Height="16"
+                      Padding="0"
+                      Margin="0"
+                      Background="Transparent"
+                      BorderBrush="Transparent"
+                      BorderThickness="0"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanAssignFromSelectedAsset}"
+                      ToolTip.Tip="Assign from selected asset"
+                      Click="OnAssignPointerFromSelectedAssetClicked">
+                <Path Width="10"
+                      Height="12"
+                      Fill="#F0F0F0"
+                      Stretch="Uniform"
+                      Data="M0 6 L4 6 L4 2 L10 7 L4 12 L4 8 L0 8 Z"/>
+              </Button>
+              <Image Source="{Binding PointerTypeIcon}"
+                     Width="12"
+                     Height="12"
+                     Margin="0"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding PointerTypeName}"/>
+              <StackPanel Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <TextBlock Text="{Binding PointerDisplayName}"
+                           ToolTip.Tip="{Binding PointerGuidText}"
+                           VerticalAlignment="Center"
+                           FontSize="10"
+                           FontWeight="{Binding NameFontWeight}"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"/>
+                <TextBlock Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                           IsVisible="{Binding ShowPointerDisplayPath}"
+                           Opacity="0.5"
+                           VerticalAlignment="Center"
+                           FontSize="10"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"/>
+              </StackPanel>
+            </StackPanel>
+            <TextBlock Text="{Binding Value}"
+                       IsVisible="{Binding IsTextVisible}"
+                       ToolTip.Tip="{Binding Value}"
+                       VerticalAlignment="Center"
+                       FontSize="10"
+                       LineHeight="12"
+                       FontWeight="{Binding NameFontWeight}"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBox Classes="inspector-editor"
+                     Text="{Binding EditorText, Mode=TwoWay}"
+                     IsVisible="{Binding IsEditorVisible}"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Left"
+                     VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     FontSize="10"
+                     Padding="0"
+                     Margin="0"
+                     AcceptsReturn="False"
+                     TextWrapping="NoWrap"
+                     Height="16"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     PointerPressed="OnInspectorEditorPointerPressed"
+                     ContextRequested="OnInspectorEditorContextRequested"
+                     LostFocus="OnInspectorEditorLostFocus"
+                     KeyDown="OnInspectorEditorKeyDown"/>
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Margin="6,0,0,0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding ShowRowActions}">
+              <Button Classes="toolbar"
+                      Content="X"
+                      Width="18"
+                      Height="18"
+                      Padding="0"
+                      FontSize="10"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanClearCollectionItems}"
+                      Click="OnClearCollectionItemsClicked"/>
+              <Button Classes="toolbar"
+                      Content="X"
+                      Width="18"
+                      Height="18"
+                      Padding="0"
+                      FontSize="10"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanRemoveCollectionEntry}"
+                      Click="OnRemoveCollectionEntryClicked"/>
+              <Button Classes="toolbar"
+                      Content="+"
+                      Width="18"
+                      Height="18"
+                      Padding="0"
+                      FontSize="10"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanAddCollectionItem}"
+                      Click="OnAddCollectionItemClicked"/>
+              <Button Classes="toolbar"
+                      Width="22"
+                      Height="18"
+                      Padding="0"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding ShowPointerOptions}"
+                      Click="OnPointerOptionsClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/More.png"
+                       Width="14"
+                       Height="14"/>
+              </Button>
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <Style Selector="ListBox.inspector-list">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+      <Setter Property="IsScrollChainingEnabled" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Visible"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar">
+      <Setter Property="AllowAutoHide" Value="False"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Vertical]">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Horizontal]">
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="CheckBorder"
+                  Width="14"
+                  Height="14"
+                  Background="#232328"
+                  BorderBrush="#8A8A90"
+                  BorderThickness="1"
+                  CornerRadius="2">
+            <Path x:Name="CheckGlyph"
+                  Width="8"
+                  Height="6"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Stroke="#F3F3F3"
+                  StrokeThickness="1.75"
+                  Stretch="Fill"
+                  Opacity="0"
+                  Data="M0,3 L2.4,5.6 L8,0"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:checked /template/ Path#CheckGlyph">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:pointerover /template/ Border#CheckBorder">
+      <Setter Property="BorderBrush" Value="#A2A2A8"/>
+    </Style>
+    <Style Selector="ToggleButton.properties-toggle">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="MinHeight" Value="16"/>
+      <Setter Property="MaxHeight" Value="16"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="True"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Hidden"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:focus">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+    <Border Grid.Row="0" Classes="panel" Padding="8" Margin="0,0,0,8">
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="72,*">
+        <TextBlock Text="Guid" Classes="subtle" VerticalAlignment="Center" FontSize="10"/>
+        <SelectableTextBlock Grid.Column="1" Text="{Binding AssetGuidText}" FontSize="10"/>
+        <TextBlock Grid.Row="1" Text="Name" Classes="subtle" VerticalAlignment="Center" FontSize="10"/>
+        <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AssetNameText}" FontSize="10"/>
+        <TextBlock Grid.Row="2" Text="Path" Classes="subtle" VerticalAlignment="Center" FontSize="10"/>
+        <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding AssetPathText}" FontSize="10"/>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="1" Classes="panel" Padding="8">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <TextBox Classes="search-box"
+                 Watermark="Filter"
+                 Margin="0,0,0,6"
+                 Text="{Binding FilterText}"/>
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,1,*" Margin="0,0,0,4">
+          <Border Width="{Binding InspectorNameColumnWidth}"
+                  Background="Transparent"/>
+          <Border Grid.Column="1"
+                  x:Name="InspectorColumnGrip"
+                  Background="#35353A"
+                  Cursor="SizeWestEast"
+                  PointerPressed="OnInspectorGripPressed"
+                  PointerMoved="OnInspectorGripMoved"
+                  PointerReleased="OnInspectorGripReleased"
+                  ZIndex="10"/>
+          <Border Grid.Column="2"
+                  Background="#202025"
+                  Margin="0,0,14,0"
+                  IsHitTestVisible="False"/>
+          <ListBox Grid.ColumnSpan="3"
+                   Classes="inspector-list"
+                   ItemsSource="{Binding VisibleNodes}"
+                   ItemTemplate="{StaticResource InspectorNodeTemplate}"
+                   ScrollViewer.AllowAutoHide="False"
+                   ScrollViewer.IsScrollInertiaEnabled="False"
+                   ScrollViewer.IsScrollChainingEnabled="False"
+                   ScrollViewer.VerticalScrollBarVisibility="Visible"
+                   ScrollViewer.HorizontalScrollBarVisibility="Visible"
+                   Padding="0,0,14,0"/>
+        </Grid>
+
+        <Border Grid.Row="2" Classes="panel" Padding="0" Margin="0,8,0,0">
+          <StackPanel>
+            <ToggleButton x:Name="PropertiesToggle"
+                          Classes="properties-toggle"
+                          IsChecked="False"
+                          Checked="OnPropertiesToggleChanged"
+                          Unchecked="OnPropertiesToggleChanged"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Stretch">
+              <Grid ColumnDefinitions="*,16"
+                    Height="18">
+                <TextBlock Text="Properties"
+                           Classes="section-title"
+                           FontSize="11"
+                           VerticalAlignment="Center"/>
+                <Path x:Name="PropertiesExpandGlyph"
+                      Grid.Column="1"
+                      Width="7"
+                      Height="7"
+                      Fill="#DADADA"
+                      Stretch="Uniform"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Data="M0,0 L0,6 L6,3 Z"
+                      RenderTransformOrigin="0.5,0.5">
+                  <Path.RenderTransform>
+                    <RotateTransform Angle="0"/>
+                  </Path.RenderTransform>
+                </Path>
+              </Grid>
+            </ToggleButton>
+            <Border x:Name="PropertiesDetails"
+                    Padding="8,0,8,8"
+                    IsVisible="False">
+              <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="140,*" Margin="0,2,0,0">
+                  <TextBlock Text="Partition Guid" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding PartitionGuidText}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+                <Grid ColumnDefinitions="140,*">
+                  <TextBlock Text="Primary Instance Guid" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding PrimaryInstanceGuidText}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+                <Grid ColumnDefinitions="140,*">
+                  <TextBlock Text="Primary Instance" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding RootType}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+                <Grid ColumnDefinitions="140,*">
+                  <TextBlock Text="Instances" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding InstanceCountText}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+                <Grid ColumnDefinitions="140,*">
+                  <TextBlock Text="Dependencies" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding DependencyCountText}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+                <Grid ColumnDefinitions="140,*">
+                  <TextBlock Text="Bundles" Classes="subtle" FontSize="10"/>
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding BundleCount}" FontSize="10" TextWrapping="NoWrap"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

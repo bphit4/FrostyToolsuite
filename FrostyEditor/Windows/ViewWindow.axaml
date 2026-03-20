@@ -7,5 +7,7 @@
         x:Class="FrostyEditor.Windows.ViewWindow"
         x:DataType="viewModels:WindowViewModel"
         Height="{Binding Height}" Width="{Binding Width}"
+        Icon="/Assets/FrostyApp.ico"
+        WindowStartupLocation="CenterScreen"
         Title="{Binding Title}">
 </Window>
