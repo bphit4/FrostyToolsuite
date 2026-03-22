@@ -16,6 +16,11 @@ public static class PluginManager
             return new TextureAssetEditorViewModel(entry);
         }
 
+        if (MeshAssetOperations.IsMeshAsset(entry))
+        {
+            return new MeshAssetEditorViewModel(entry);
+        }
+
         if (s_ebxAssetEditors.TryGetValue(entry.Type.ToLower(), out Type? type) &&
             Activator.CreateInstance(type, entry) is AssetEditorViewModel editor)
         {

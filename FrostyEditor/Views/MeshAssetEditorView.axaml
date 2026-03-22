@@ -1,0 +1,788 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:FrostyEditor.Controls"
+             xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             xmlns:models="clr-namespace:FrostyEditor.Models"
+             mc:Ignorable="d"
+             x:Class="FrostyEditor.Views.MeshAssetEditorView"
+             x:Name="Root"
+             x:DataType="viewModels:MeshAssetEditorViewModel"
+             d:DesignWidth="1380"
+             d:DesignHeight="860"
+             Tag="{Binding InspectorNameColumnWidth}">
+  <UserControl.Resources>
+    <DataTemplate x:Key="InspectorNameTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid
+            Height="18"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorRowPointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <Separator Tag="expand-separator" IsVisible="False"/>
+            <MenuItem Header="Expand All One Level" Tag="expand-one-level" Click="OnExpandOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Expand All Levels" Tag="expand-all-levels" Click="OnExpandAllLevelsMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All One Level" Tag="collapse-one-level" Click="OnCollapseOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All Levels" Tag="collapse-all-levels" Click="OnCollapseAllLevelsMenuItemClick" IsVisible="False"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Border Background="Transparent"
+                Padding="3,0"
+                Height="18">
+          <Grid ColumnDefinitions="*">
+            <TextBlock Grid.Column="0"
+                       VerticalAlignment="Center"
+                       FontSize="10"
+                       LineHeight="12"
+                       FontWeight="{Binding NameFontWeight}"
+                       TextWrapping="NoWrap">
+              <Run Text="{Binding Name}"/>
+              <Run Text="{Binding NameSuffix}"/>
+            </TextBlock>
+          </Grid>
+        </Border>
+      </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="InspectorValueTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid
+            Height="18"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorRowPointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <Separator Tag="expand-separator" IsVisible="False"/>
+            <MenuItem Header="Expand All One Level" Tag="expand-one-level" Click="OnExpandOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Expand All Levels" Tag="expand-all-levels" Click="OnExpandAllLevelsMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All One Level" Tag="collapse-one-level" Click="OnCollapseOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All Levels" Tag="collapse-all-levels" Click="OnCollapseAllLevelsMenuItemClick" IsVisible="False"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Border
+                Background="Transparent"
+                Padding="6,0,6,0"
+                Height="18"
+                ClipToBounds="True">
+          <Grid ColumnDefinitions="*,Auto">
+            <CheckBox IsVisible="{Binding IsBooleanVisible}"
+                      Classes="compact-checkbox"
+                      IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                      VerticalAlignment="Center"
+                      HorizontalAlignment="Left"
+                      Margin="0"
+                      Padding="0"/>
+            <StackPanel IsVisible="{Binding IsPointerDisplayVisible}"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        VerticalAlignment="Center">
+              <Button Width="14"
+                      Height="16"
+                      Padding="0"
+                      Margin="0"
+                      Background="Transparent"
+                      BorderBrush="Transparent"
+                      BorderThickness="0"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanAssignFromSelectedAsset}"
+                      ToolTip.Tip="Assign from selected asset"
+                      Click="OnAssignPointerFromSelectedAssetClicked">
+                <Path Width="10"
+                      Height="12"
+                      Fill="#F0F0F0"
+                      Stretch="Uniform"
+                      Data="M0 6 L4 6 L4 2 L10 7 L4 12 L4 8 L0 8 Z"/>
+              </Button>
+              <Image Source="{Binding PointerTypeIcon}"
+                     Width="12"
+                     Height="12"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding PointerTypeName}"/>
+              <StackPanel Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <TextBlock Classes="inspector-value-text"
+                           Text="{Binding PointerDisplayName}"
+                           ToolTip.Tip="{Binding PointerGuidText}"
+                           FontWeight="{Binding NameFontWeight}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Classes="inspector-value-text"
+                           Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                           IsVisible="{Binding ShowPointerDisplayPath}"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+            </StackPanel>
+            <TextBlock Classes="inspector-value-text"
+                       Text="{Binding Value}"
+                       IsVisible="{Binding IsTextVisible}"
+                       FontWeight="{Binding NameFontWeight}"
+                       VerticalAlignment="Center"/>
+            <TextBox Classes="inspector-editor"
+                     Text="{Binding EditorText, Mode=TwoWay}"
+                     IsVisible="{Binding IsEditorVisible}"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Left"
+                     VerticalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     FontSize="10"
+                     Padding="0"
+                     Margin="0"
+                     AcceptsReturn="False"
+                     TextWrapping="NoWrap"
+                     Height="16"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     PointerPressed="OnInspectorEditorPointerPressed"
+                     ContextRequested="OnInspectorEditorContextRequested"
+                     LostFocus="OnInspectorEditorLostFocus"
+                     KeyDown="OnInspectorEditorKeyDown"/>
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Margin="6,0,0,0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding ShowRowActions}">
+              <Button Classes="toolbar"
+                      Content="X"
+                      Width="18"
+                      Height="18"
+                      Padding="0"
+                      FontSize="10"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanClearCollectionItems}"
+                      Click="OnClearCollectionItemsClicked"/>
+              <Button Classes="toolbar"
+                      Content="X"
+                      Width="18"
+                      Height="18"
+                      Padding="0"
+                      FontSize="10"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding CanRemoveCollectionEntry}"
+                      Click="OnRemoveCollectionEntryClicked"/>
+                  <Button Classes="toolbar"
+                          Width="18"
+                          Height="18"
+                          Padding="0"
+                          FontSize="13"
+                          FontWeight="Bold"
+                          HorizontalContentAlignment="Center"
+                          VerticalContentAlignment="Center"
+                          IsVisible="{Binding CanAddCollectionItem}"
+                          Click="OnAddCollectionItemClicked">
+                    <TextBlock Text="+"
+                               FontSize="13"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                  </Button>
+              <Button Classes="toolbar"
+                      Width="22"
+                      Height="18"
+                      Padding="0"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      IsVisible="{Binding ShowPointerOptions}"
+                      Click="OnPointerOptionsClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/More.png"
+                       Width="14"
+                       Height="14"/>
+              </Button>
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="InspectorRowTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid Height="22"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorRowPointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <Separator Tag="expand-separator" IsVisible="False"/>
+            <MenuItem Header="Expand All One Level" Tag="expand-one-level" Click="OnExpandOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Expand All Levels" Tag="expand-all-levels" Click="OnExpandAllLevelsMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All One Level" Tag="collapse-one-level" Click="OnCollapseOneLevelMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Collapse All Levels" Tag="collapse-all-levels" Click="OnCollapseAllLevelsMenuItemClick" IsVisible="False"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Grid.Column="0"
+                  Width="{Binding Tag, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  Background="Transparent"
+                  Padding="1,0,6,0"
+                  Height="22"
+                  ClipToBounds="True">
+            <Grid ColumnDefinitions="*"
+                  Margin="{Binding NameIndent}">
+              <TextBlock Grid.Column="0"
+                         VerticalAlignment="Center"
+                         Foreground="#F2F2F2"
+                         FontSize="11"
+                         LineHeight="14"
+                         FontWeight="{Binding NameFontWeight}"
+                         ClipToBounds="True"
+                         TextWrapping="NoWrap">
+                <Run Text="{Binding Name}"/>
+                <Run Text="{Binding NameSuffix}"/>
+              </TextBlock>
+            </Grid>
+          </Border>
+          <Border Grid.Column="1"
+                  Background="Transparent"
+                  Padding="6,0,10,0"
+                  Height="22"
+                  ClipToBounds="False">
+            <Grid ColumnDefinitions="*,Auto">
+              <CheckBox IsVisible="{Binding IsBooleanVisible}"
+                        Classes="compact-checkbox"
+                        IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Left"
+                        Margin="0"
+                        Padding="0"/>
+              <StackPanel IsVisible="{Binding IsPointerDisplayVisible}"
+                          Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <Button Width="14"
+                        Height="16"
+                        Padding="0"
+                        Margin="0"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        BorderThickness="0"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        IsVisible="{Binding CanAssignFromSelectedAsset}"
+                        ToolTip.Tip="Assign from selected asset"
+                        Click="OnAssignPointerFromSelectedAssetClicked">
+                  <Path Width="10"
+                        Height="12"
+                        Fill="#F0F0F0"
+                        Stretch="Uniform"
+                        Data="M0 6 L4 6 L4 2 L10 7 L4 12 L4 8 L0 8 Z"/>
+                </Button>
+                <Image Source="{Binding PointerTypeIcon}"
+                       Width="12"
+                       Height="12"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="{Binding PointerTypeName}"/>
+                <StackPanel Orientation="Horizontal"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                  <SelectableTextBlock Classes="inspector-value-text"
+                                       Text="{Binding PointerDisplayName}"
+                                       ToolTip.Tip="{Binding PointerGuidText}"
+                                       FontWeight="{Binding NameFontWeight}"
+                                       VerticalAlignment="Center"/>
+                  <SelectableTextBlock Classes="inspector-value-text"
+                                       Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                       IsVisible="{Binding ShowPointerDisplayPath}"
+                                       VerticalAlignment="Center"/>
+                </StackPanel>
+              </StackPanel>
+              <SelectableTextBlock Classes="inspector-value-text"
+                                   Text="{Binding Value}"
+                                   IsVisible="{Binding IsTextVisible}"
+                                   FontWeight="{Binding NameFontWeight}"
+                                   VerticalAlignment="Center"/>
+              <TextBox Classes="inspector-editor"
+                       Text="{Binding EditorText, Mode=TwoWay}"
+                       IsVisible="{Binding IsEditorVisible}"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Left"
+                       VerticalContentAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="11"
+                       Padding="0"
+                       Margin="0"
+                       AcceptsReturn="False"
+                       TextWrapping="NoWrap"
+                       Height="18"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                       PointerPressed="OnInspectorEditorPointerPressed"
+                       ContextRequested="OnInspectorEditorContextRequested"
+                       LostFocus="OnInspectorEditorLostFocus"
+                       KeyDown="OnInspectorEditorKeyDown"/>
+              <StackPanel Grid.Column="1"
+                          Orientation="Horizontal"
+                          Spacing="2"
+                          Margin="8,0,2,0"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding ShowRowActions}">
+                <Button Classes="toolbar"
+                        Content="X"
+                        Width="18"
+                        Height="18"
+                        Padding="0"
+                        FontSize="10"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        IsVisible="{Binding CanClearCollectionItems}"
+                        Click="OnClearCollectionItemsClicked"/>
+                <Button Classes="toolbar"
+                        Content="X"
+                        Width="18"
+                        Height="18"
+                        Padding="0"
+                        FontSize="10"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        IsVisible="{Binding CanRemoveCollectionEntry}"
+                        Click="OnRemoveCollectionEntryClicked"/>
+                <Button Classes="toolbar"
+                        Content="+"
+                        Width="18"
+                        Height="18"
+                        Padding="0"
+                        FontSize="10"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        IsVisible="{Binding CanAddCollectionItem}"
+                        Click="OnAddCollectionItemClicked"/>
+                <Button Classes="toolbar"
+                        Width="22"
+                        Height="18"
+                        Padding="0"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        IsVisible="{Binding ShowPointerOptions}"
+                        Click="OnPointerOptionsClicked">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/More.png"
+                         Width="14"
+                         Height="14"/>
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Border>
+        </Grid>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="ListBox.inspector-name-list">
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+      <Setter Property="IsScrollChainingEnabled" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Hidden"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.inspector-name-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#303030"/>
+    </Style>
+    <Style Selector="TextBox.mesh-value">
+      <Setter Property="IsReadOnly" Value="True" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MinHeight" Value="20" />
+    </Style>
+    <Style Selector="ListBox.inspector-list">
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+      <Setter Property="IsScrollChainingEnabled" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Visible"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar">
+      <Setter Property="AllowAutoHide" Value="False"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Vertical]">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list ScrollBar[Orientation=Horizontal]">
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem">
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.inspector-list > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#303030"/>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinWidth" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="MaxWidth" Value="14"/>
+      <Setter Property="MaxHeight" Value="14"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="CheckBorder"
+                  Width="14"
+                  Height="14"
+                  Background="#232328"
+                  BorderBrush="#8A8A90"
+                  BorderThickness="1"
+                  CornerRadius="2">
+            <Path x:Name="CheckGlyph"
+                  Width="8"
+                  Height="6"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Stroke="#F3F3F3"
+                  StrokeThickness="1.75"
+                  Stretch="Fill"
+                  Opacity="0"
+                  Data="M0,3 L2.4,5.6 L8,0"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:checked /template/ Path#CheckGlyph">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="CheckBox.compact-checkbox:pointerover /template/ Border#CheckBorder">
+      <Setter Property="BorderBrush" Value="#A2A2A8"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="MinHeight" Value="16"/>
+      <Setter Property="MaxHeight" Value="16"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="True"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Hidden"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="TextBox.inspector-editor:focus">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+    <Border Classes="panel" Padding="8" Margin="0,0,0,8">
+      <DockPanel LastChildFill="False">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Classes="toolbar" Content="Export" Command="{Binding ExportMeshCommand}" />
+          <Button Classes="toolbar" Content="Import" Command="{Binding ImportMeshCommand}" />
+          <Button Classes="toolbar" Content="Revert" Command="{Binding RevertMeshCommand}" IsVisible="{Binding CanRevert}" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+          <TextBox Classes="mesh-value subtle"
+                   Text="{Binding MeshName}"
+                   FontWeight="SemiBold"
+                   MinWidth="220" />
+          <TextBox Classes="mesh-value subtle"
+                   Text="{Binding ResourceRid}"
+                   VerticalContentAlignment="Center"
+                   FontWeight="SemiBold"
+                   MinWidth="160" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="1.8*,0.95*">
+      <Border Grid.Column="0" Classes="panel" Padding="10" Margin="0,0,10,0">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+          <DockPanel LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left">
+              <TextBlock Text="Mesh Viewport" FontWeight="SemiBold" />
+              <TextBox Classes="mesh-value subtle"
+                       Text="{Binding MeshFullName}"
+                       MinWidth="360" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Button Classes="toolbar" Content="Reset View" Click="OnResetViewClick" />
+              <Button Classes="toolbar" Content="Refresh" Click="OnRefreshViewportClick" />
+              <TextBlock Text="{Binding PreviewViewLabel}" Classes="subtle" VerticalAlignment="Center" />
+            </StackPanel>
+          </DockPanel>
+
+          <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,8,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Classes="toolbar" Content="Perspective" Click="OnPerspectiveViewClick" />
+              <Button Classes="toolbar" Content="Front" Click="OnFrontViewClick" />
+              <Button Classes="toolbar" Content="Back" Click="OnBackViewClick" />
+              <Button Classes="toolbar" Content="Left" Click="OnLeftViewClick" />
+              <Button Classes="toolbar" Content="Right" Click="OnRightViewClick" />
+              <Button Classes="toolbar" Content="Top" Click="OnTopViewClick" />
+              <Button Classes="toolbar" Content="Bottom" Click="OnBottomViewClick" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="LOD" Classes="subtle" VerticalAlignment="Center" />
+              <ComboBox Width="150"
+                        ItemsSource="{Binding Lods}"
+                        SelectedItem="{Binding SelectedLod, Mode=TwoWay}" />
+              <TextBlock Text="Mode" Classes="subtle" VerticalAlignment="Center" />
+              <ComboBox Width="136"
+                        ItemsSource="{Binding AvailableRenderModes}"
+                        SelectedItem="{Binding SelectedRenderMode, Mode=TwoWay}" />
+              <TextBlock Text="Channels" Classes="subtle" VerticalAlignment="Center" />
+              <CheckBox Content="R" IsChecked="{Binding RedChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+              <CheckBox Content="G" IsChecked="{Binding GreenChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+              <CheckBox Content="B" IsChecked="{Binding BlueChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+              <CheckBox Content="A" IsChecked="{Binding AlphaChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+            </StackPanel>
+          </DockPanel>
+
+          <Border Grid.Row="2"
+                  Background="#171A20"
+                  BorderBrush="#2F3540"
+                  BorderThickness="1"
+                  CornerRadius="4"
+                  Padding="0"
+                  ClipToBounds="True">
+            <Grid>
+              <controls:WindowsMeshViewportHost x:Name="Viewport3D"
+                                                IsVisible="{Binding ShowGpuViewport}" />
+              <ScrollViewer IsVisible="{Binding ShowSoftwarePreview}"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                <Image Source="{Binding PreviewBitmap}"
+                       IsVisible="{Binding HasPreviewBitmap}"
+                       Stretch="None"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+
+          <Grid Grid.Row="3" Margin="0,8,0,0" ColumnDefinitions="1.2*,1*">
+            <TextBox Classes="mesh-value subtle"
+                     Text="{Binding PreviewStatus}"
+                     Margin="0,0,10,0" />
+            <TextBox Grid.Column="1"
+                     Classes="mesh-value subtle"
+                     Text="{Binding PreviewInteractionSummary}" />
+          </Grid>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Classes="panel" Padding="8">
+        <TabControl SelectionChanged="OnInspectorTabSelectionChanged">
+          <TabItem Header="Properties">
+            <Grid RowDefinitions="Auto,*" Margin="0,6,0,0">
+              <TextBox Classes="search-box"
+                       Watermark="Filter"
+                       Margin="0,0,0,6"
+                       Text="{Binding PropertiesFilterText, Mode=TwoWay}"/>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,8,*" ClipToBounds="True">
+                <Border Width="{Binding InspectorNameColumnWidth}"
+                        Background="#363636"/>
+                  <Border Grid.Column="1"
+                          Background="Transparent"
+                        Cursor="SizeWestEast"
+                        PointerPressed="OnInspectorGripPressed"
+                        PointerMoved="OnInspectorGripMoved"
+                        PointerReleased="OnInspectorGripReleased"
+                        ZIndex="10">
+                    <Border Width="1"
+                            Background="#35353A"
+                            HorizontalAlignment="Center"/>
+                  </Border>
+                  <Border Grid.Column="2"
+                          Background="#292929"/>
+                  <ListBox x:Name="PropertyInspectorList"
+                           Grid.ColumnSpan="3"
+                           Classes="inspector-list"
+                           ItemsSource="{Binding PropertyVisibleNodes}"
+                           ItemTemplate="{StaticResource InspectorRowTemplate}"
+                           ScrollViewer.AllowAutoHide="True"
+                           ScrollViewer.IsScrollInertiaEnabled="False"
+                           ScrollViewer.IsScrollChainingEnabled="False"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+              </Grid>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="Variations">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="0,6,0,0">
+              <ComboBox ItemsSource="{Binding Variations}"
+                        SelectedItem="{Binding SelectedVariation, Mode=TwoWay}"
+                        IsEnabled="{Binding HasVariations}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBox Grid.Row="1"
+                       Classes="search-box"
+                       Watermark="Filter"
+                       Margin="0,6,0,6"
+                       Text="{Binding VariationsFilterText, Mode=TwoWay}"/>
+              <Grid Grid.Row="2" ColumnDefinitions="Auto,8,*" ClipToBounds="True">
+                <Border Width="{Binding InspectorNameColumnWidth}"
+                        Background="#363636"/>
+                  <Border Grid.Column="1"
+                          Background="Transparent"
+                        Cursor="SizeWestEast"
+                        PointerPressed="OnInspectorGripPressed"
+                        PointerMoved="OnInspectorGripMoved"
+                        PointerReleased="OnInspectorGripReleased"
+                        ZIndex="10">
+                    <Border Width="1"
+                            Background="#35353A"
+                            HorizontalAlignment="Center"/>
+                  </Border>
+                  <Border Grid.Column="2"
+                          Background="#292929"/>
+                  <ListBox x:Name="VariationInspectorList"
+                           Grid.ColumnSpan="3"
+                           Classes="inspector-list"
+                           ItemsSource="{Binding VariationVisibleNodes}"
+                           ItemTemplate="{StaticResource InspectorRowTemplate}"
+                           ScrollViewer.AllowAutoHide="True"
+                           ScrollViewer.IsScrollInertiaEnabled="False"
+                           ScrollViewer.IsScrollChainingEnabled="False"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+              </Grid>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="Mesh">
+            <Grid RowDefinitions="Auto,*" Margin="0,6,0,0">
+              <TextBox Classes="search-box"
+                       Watermark="Filter"
+                       Margin="0,0,0,6"
+                       Text="{Binding MeshFilterText, Mode=TwoWay}"/>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,8,*" ClipToBounds="True">
+                <Border Width="{Binding InspectorNameColumnWidth}"
+                        Background="#363636"/>
+                  <Border Grid.Column="1"
+                          Background="Transparent"
+                        Cursor="SizeWestEast"
+                        PointerPressed="OnInspectorGripPressed"
+                        PointerMoved="OnInspectorGripMoved"
+                        PointerReleased="OnInspectorGripReleased"
+                        ZIndex="10">
+                    <Border Width="1"
+                            Background="#35353A"
+                            HorizontalAlignment="Center"/>
+                  </Border>
+                  <Border Grid.Column="2"
+                          Background="#292929"/>
+                  <ListBox x:Name="MeshInspectorList"
+                           Grid.ColumnSpan="3"
+                           Classes="inspector-list"
+                           ItemsSource="{Binding MeshInspectorVisibleNodes}"
+                           ItemTemplate="{StaticResource InspectorRowTemplate}"
+                           ScrollViewer.AllowAutoHide="True"
+                           ScrollViewer.IsScrollInertiaEnabled="False"
+                           ScrollViewer.IsScrollChainingEnabled="False"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+              </Grid>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="Scene">
+            <Grid RowDefinitions="Auto,*" Margin="0,6,0,0">
+              <TextBox Classes="search-box"
+                       Watermark="Filter"
+                       Margin="0,0,0,6"
+                       Text="{Binding SceneFilterText, Mode=TwoWay}"/>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,8,*" ClipToBounds="True">
+                <Border Width="{Binding InspectorNameColumnWidth}"
+                        Background="#363636"/>
+                  <Border Grid.Column="1"
+                          Background="Transparent"
+                        Cursor="SizeWestEast"
+                        PointerPressed="OnInspectorGripPressed"
+                        PointerMoved="OnInspectorGripMoved"
+                        PointerReleased="OnInspectorGripReleased"
+                        ZIndex="10">
+                    <Border Width="1"
+                            Background="#35353A"
+                            HorizontalAlignment="Center"/>
+                  </Border>
+                  <Border Grid.Column="2"
+                          Background="#292929"/>
+                  <ListBox x:Name="SceneInspectorList"
+                           Grid.ColumnSpan="3"
+                           Classes="inspector-list"
+                           ItemsSource="{Binding SceneVisibleNodes}"
+                           ItemTemplate="{StaticResource InspectorRowTemplate}"
+                           ScrollViewer.AllowAutoHide="True"
+                           ScrollViewer.IsScrollInertiaEnabled="False"
+                           ScrollViewer.IsScrollChainingEnabled="False"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+              </Grid>
+            </Grid>
+          </TabItem>
+        </TabControl>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -29,10 +29,12 @@ public partial class LegacyExplorerViewModel : ViewModelBase
     private LegacyFolderTreeNodeModel? m_selectedFolderNode;
     private LegacyAssetModel? m_selectedAsset;
     private CancellationTokenSource? m_filterCts;
+    private readonly List<string> m_allAssetTypes = ["All"];
     private DateTime m_lastFolderTapUtc = DateTime.MinValue;
     private bool m_loadAttempted;
     private bool m_isLoading;
     private bool m_suppressImmediateFilterApply;
+    private bool m_suppressAssetTypeSearchSync;
 
     [ObservableProperty]
     private HierarchicalTreeDataGridSource<LegacyFolderTreeNodeModel> m_folderSource;
@@ -89,6 +91,9 @@ public partial class LegacyExplorerViewModel : ViewModelBase
     private string m_selectedAssetTypeFilter = "All";
 
     [ObservableProperty]
+    private string m_assetTypeSearchText = string.Empty;
+
+    [ObservableProperty]
     private bool m_showModifiedOnly;
 
     [ObservableProperty]
@@ -141,7 +146,9 @@ public partial class LegacyExplorerViewModel : ViewModelBase
             Items =
             {
                 new MenuItem { Header = "Expand", Command = ExpandSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png") },
-                new MenuItem { Header = "Collapse", Command = CollapseSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/CloseFolder.png") }
+                new MenuItem { Header = "Collapse", Command = CollapseSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/CloseFolder.png") },
+                new Separator(),
+                new MenuItem { Header = "Copy Folder Path", Command = CopySelectedFolderPathCommand }
             }
         };
 
@@ -151,7 +158,10 @@ public partial class LegacyExplorerViewModel : ViewModelBase
             {
                 new MenuItem { Header = "Open", Command = OpenAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenAsset.png") },
                 new MenuItem { Header = "Export", Command = ExportAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Export.png") },
-                new MenuItem { Header = "Import", Command = ImportAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Import.png") }
+                new MenuItem { Header = "Import", Command = ImportAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Import.png") },
+                new Separator(),
+                new MenuItem { Header = "Copy Asset Name", Command = CopySelectedAssetNameCommand },
+                new MenuItem { Header = "Copy Asset Path", Command = CopySelectedAssetPathCommand }
             }
         };
 
@@ -168,7 +178,24 @@ public partial class LegacyExplorerViewModel : ViewModelBase
 
     partial void OnSelectedAssetTypeFilterChanged(string value)
     {
+        if (!m_suppressAssetTypeSearchSync)
+        {
+            AssetTypeSearchText = string.Equals(value, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : value;
+        }
+
         if (!m_suppressImmediateFilterApply)
+        {
+            RebuildFilteredTree();
+        }
+    }
+
+    partial void OnAssetTypeSearchTextChanged(string value)
+    {
+        ApplyAvailableAssetTypeFilter();
+
+        if (!m_suppressImmediateFilterApply &&
+            string.IsNullOrWhiteSpace(value) &&
+            string.Equals(SelectedAssetTypeFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
             RebuildFilteredTree();
         }
@@ -311,6 +338,51 @@ public partial class LegacyExplorerViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task CopySelectedFolderPath()
+    {
+        string? folderPath = GetFolderPathText(m_selectedFolderNode);
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(folderPath))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy folder path because the clipboard is unavailable.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopySelectedAssetName()
+    {
+        string? assetName = m_selectedAsset?.FileNameWithExtension;
+        if (string.IsNullOrWhiteSpace(assetName))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(assetName))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy asset name because the clipboard is unavailable.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopySelectedAssetPath()
+    {
+        string? assetPath = m_selectedAsset?.FullName;
+        if (string.IsNullOrWhiteSpace(assetPath))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(assetPath))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy asset path because the clipboard is unavailable.");
+        }
+    }
+
+    [RelayCommand]
     private void ExpandSelectedFolder()
     {
         if (m_selectedFolderNode is not null)
@@ -352,6 +424,16 @@ public partial class LegacyExplorerViewModel : ViewModelBase
         clickedNode.IsExpanded = !clickedNode.IsExpanded;
     }
 
+    public void SelectFolderFromPointer(LegacyFolderTreeNodeModel? clickedNode)
+    {
+        if (clickedNode is null)
+        {
+            return;
+        }
+
+        SelectFolder(clickedNode);
+    }
+
     public void HandleFolderDoubleTapped(LegacyFolderTreeNodeModel? clickedNode)
     {
         if (clickedNode is null)
@@ -369,6 +451,19 @@ public partial class LegacyExplorerViewModel : ViewModelBase
         {
             OpenAssetCommand.Execute(null);
         }
+    }
+
+    public void HandleAssetTapped(LegacyAssetModel? clickedAsset)
+    {
+        if (clickedAsset is null)
+        {
+            return;
+        }
+
+        m_selectedAsset = clickedAsset;
+        SelectedAssetName = clickedAsset.FileNameWithExtension;
+        SelectedAssetType = $"Type: {clickedAsset.Type}";
+        SelectedAssetPath = $"Path: {clickedAsset.Path}";
     }
 
     private void OnSelectionChanged(object? sender, TreeSelectionModelSelectionChangedEventArgs<LegacyFolderTreeNodeModel> e)
@@ -406,7 +501,7 @@ public partial class LegacyExplorerViewModel : ViewModelBase
 
         try
         {
-            await Task.Delay(120, cts.Token);
+            await Task.Delay(280, cts.Token);
             if (cts.IsCancellationRequested)
             {
                 return;
@@ -552,13 +647,55 @@ public partial class LegacyExplorerViewModel : ViewModelBase
         m_suppressImmediateFilterApply = true;
         try
         {
-            AvailableAssetTypes = EnumerateAssetTypes(m_root).ToList();
+            SetAvailableAssetTypes(EnumerateAssetTypes(m_root));
             OnPropertyChanged(nameof(AvailableAssetTypes));
             SelectedAssetTypeFilter = "All";
         }
         finally
         {
             m_suppressImmediateFilterApply = false;
+        }
+    }
+
+    private void SetAvailableAssetTypes(IEnumerable<string> assetTypes)
+    {
+        m_allAssetTypes.Clear();
+        m_allAssetTypes.Add("All");
+
+        foreach (string type in assetTypes)
+        {
+            if (!m_allAssetTypes.Any(existing => string.Equals(existing, type, StringComparison.OrdinalIgnoreCase)))
+            {
+                m_allAssetTypes.Add(type);
+            }
+        }
+
+        ApplyAvailableAssetTypeFilter();
+    }
+
+    private void ApplyAvailableAssetTypeFilter()
+    {
+        string filter = (AssetTypeSearchText ?? string.Empty).Trim();
+        AvailableAssetTypes = m_allAssetTypes
+            .Where(type =>
+                string.Equals(type, "All", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(filter) ||
+                type.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        OnPropertyChanged(nameof(AvailableAssetTypes));
+
+        if (!AvailableAssetTypes.Contains(SelectedAssetTypeFilter ?? "All"))
+        {
+            m_suppressAssetTypeSearchSync = true;
+            try
+            {
+                SelectedAssetTypeFilter = "All";
+            }
+            finally
+            {
+                m_suppressAssetTypeSearchSync = false;
+            }
         }
     }
 
@@ -583,6 +720,22 @@ public partial class LegacyExplorerViewModel : ViewModelBase
         {
             CollectAssetTypes(child, types);
         }
+    }
+
+    private string? GetFolderPathText(LegacyFolderTreeNodeModel? folder)
+    {
+        string[]? path = GetNodePath(m_root, folder);
+        if (path is null || path.Length == 0)
+        {
+            return null;
+        }
+
+        if (path.Length == 1 && string.Equals(path[0], "ROOT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ROOT";
+        }
+
+        return string.Join('/', path.SkipWhile((segment, index) => index == 0 && string.Equals(segment, "ROOT", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static string[]? GetNodePath(LegacyFolderTreeNodeModel root, LegacyFolderTreeNodeModel? target)

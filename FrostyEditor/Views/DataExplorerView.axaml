@@ -58,7 +58,7 @@
   <UserControl.Resources>
     <DataTemplate x:Key="FolderNameCell"
                   DataType="models:FolderTreeNodeModel">
-      <StackPanel Orientation="Horizontal" Margin="2,0,4,0">
+      <StackPanel Orientation="Horizontal" Margin="4,0,4,0">
         <Image Source="{Binding FolderIcon}"
                Width="16"
                Height="16"
@@ -72,7 +72,7 @@
 
     <DataTemplate x:Key="AssetNameCell"
                   DataType="models:AssetModel">
-      <StackPanel Orientation="Horizontal" Margin="2,0,4,0" Spacing="4">
+      <StackPanel Orientation="Horizontal" Margin="4,0,4,0" Spacing="5">
         <Image Source="{Binding Icon}"
                Width="16"
                Height="16"
@@ -88,7 +88,7 @@
 
     <DataTemplate x:Key="LegacyFolderNameCell"
                   DataType="models:LegacyFolderTreeNodeModel">
-      <StackPanel Orientation="Horizontal" Margin="2,0,4,0">
+      <StackPanel Orientation="Horizontal" Margin="4,0,4,0">
         <Image Source="{Binding FolderIcon}"
                Width="16"
                Height="16"
@@ -102,7 +102,7 @@
 
     <DataTemplate x:Key="LegacyAssetNameCell"
                   DataType="models:LegacyAssetModel">
-      <StackPanel Orientation="Horizontal" Margin="2,0,4,0" Spacing="4">
+      <StackPanel Orientation="Horizontal" Margin="4,0,4,0" Spacing="5">
         <Image Source="{Binding Icon}"
                Width="16"
                Height="16"
@@ -204,15 +204,20 @@
     <Grid Grid.Row="2">
       <Grid IsVisible="{Binding IsDataExplorerSelected}"
             RowDefinitions="Auto,Auto,2.25*,6,*">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,140" Margin="0,0,0,6">
           <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center"/>
           <ComboBox Grid.Column="1"
                     x:Name="DataTypeCombo"
                     Classes="explorer-filter-combo"
                     Margin="6,0,0,0"
-                    Width="{Binding Bounds.Width, ElementName=DataSearchBox}"
                     ItemsSource="{Binding AvailableAssetTypes}"
                     SelectedItem="{Binding SelectedAssetTypeFilter}"/>
+          <TextBox Grid.Column="3"
+                   Classes="search-box"
+                   Margin="8,0,0,0"
+                   Watermark="Filter types"
+                   TextChanged="TypeFilterTextBox_OnTextChanged"
+                   Text="{Binding AssetTypeSearchText}"/>
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
@@ -236,6 +241,7 @@
                           Margin="2,0,2,2"
                           Source="{Binding FolderSource}"
                           ContextFlyout="{Binding FolderContextMenu, Mode=OneWay}"
+                          PointerPressed="FolderTree_OnPointerPressed"
                           Tapped="FolderTree_OnTapped"
                           DoubleTapped="FolderTree_OnDoubleTapped"/>
           </Grid>
@@ -269,15 +275,21 @@
 
       <Grid IsVisible="{Binding IsLegacyExplorerSelected}"
             RowDefinitions="Auto,Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,140" Margin="0,0,0,6">
           <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center"/>
           <ComboBox Grid.Column="1"
                     x:Name="LegacyTypeCombo"
                     Classes="explorer-filter-combo"
                     Margin="6,0,0,0"
-                    Width="{Binding Bounds.Width, ElementName=LegacySearchBox}"
                     ItemsSource="{Binding LegacyExplorer.AvailableAssetTypes}"
                     SelectedItem="{Binding LegacyExplorer.SelectedAssetTypeFilter}"/>
+          <TextBox Grid.Column="3"
+                   Classes="search-box"
+                   Margin="8,0,0,0"
+                   Watermark="Filter types"
+                   TextChanged="LegacyTypeFilterTextBox_OnTextChanged"
+                   Text="{Binding LegacyExplorer.AssetTypeSearchText}"
+                   IsEnabled="{Binding LegacyExplorer.HasAssets}"/>
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
@@ -326,6 +338,7 @@
                           Margin="2,0,2,2"
                           Source="{Binding LegacyExplorer.FolderSource}"
                           ContextFlyout="{Binding LegacyExplorer.FolderContextMenu, Mode=OneWay}"
+                          PointerPressed="LegacyFolderTree_OnPointerPressed"
                           Tapped="LegacyFolderTree_OnTapped"
                           DoubleTapped="LegacyFolderTree_OnDoubleTapped"/>
           </Border>
@@ -350,6 +363,7 @@
                             Margin="2,0,2,2"
                             Source="{Binding LegacyExplorer.AssetsSource}"
                             ContextFlyout="{Binding LegacyExplorer.AssetContextMenu, Mode=OneWay}"
+                            PointerPressed="LegacyAssetsTree_OnPointerPressed"
                             DoubleTapped="LegacyAssetsTree_OnDoubleTapped"/>
             </Grid>
           </Border>

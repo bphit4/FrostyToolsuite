@@ -45,7 +45,8 @@ public class HuffmanEncodingTests
             Assert.That(encodingResult.EncodedTextPositions, Has.Count.EqualTo(texts.Length), "Encoded text position has different number of entries than the number of encoded texts!");
         });
 
-        var byteArray = encodingResult.EncodedTexts;
+        Assert.That(encodingResult.EncodedTexts, Is.Not.Null);
+        byte[] byteArray = encodingResult.EncodedTexts!;
 
         HuffmanDecoder decoder = CreateDecoderFromTree(encodingTree);
         using (MemoryStream stream = new())
@@ -106,7 +107,8 @@ public class HuffmanEncodingTests
         HuffmanEncodedTextArray<string> encodingResult = encoder.EncodeTexts(texts.Select(
             x => new Tuple<string, string>(x, x)).ToList(), Endian.Little, false);
 
-        var byteArray = encodingResult.EncodedTexts;
+        Assert.That(encodingResult.EncodedTexts, Is.Not.Null);
+        byte[] byteArray = encodingResult.EncodedTexts!;
 
         HuffmanDecoder decoder = CreateDecoderFromTree(encodingTree);
         using (MemoryStream stream = new())
@@ -145,7 +147,8 @@ public class HuffmanEncodingTests
         string[] texts = { "I'm a mog, half man, half dog", "I'm my own best friend!", "Oh yes, now they are small and cute and cuddly", " and next they suddenly have teeth", " and there is a thousand of them" };
 
         var encodingResult = HuffmanEncoder.Encode(texts);
-        byte[] byteArray = encodingResult.EncodedTexts;
+        Assert.That(encodingResult.EncodedTexts, Is.Not.Null);
+        byte[] byteArray = encodingResult.EncodedTexts!;
 
         HuffmanDecoder decoder = CreateDecoderFromTree(encodingResult.EncodingTree);
         using (MemoryStream stream = new())

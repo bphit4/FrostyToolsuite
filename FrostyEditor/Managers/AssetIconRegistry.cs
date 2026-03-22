@@ -9,6 +9,7 @@ namespace FrostyEditor.Managers;
 public static class AssetIconRegistry
 {
     private const string AssetBasePath = "avares://FrostyEditor/Assets/AssetTypes/";
+    private static readonly Dictionary<string, Bitmap> s_legacyBitmapCache = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, string> s_exactTypeMappings = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -143,5 +144,18 @@ public static class AssetIconRegistry
 
         using Stream stream = AssetLoader.Open(new Uri(uri));
         return new Bitmap(stream);
+    }
+
+    public static Bitmap GetLegacyIcon(string uri)
+    {
+        if (s_legacyBitmapCache.TryGetValue(uri, out Bitmap? cached))
+        {
+            return cached;
+        }
+
+        using Stream stream = AssetLoader.Open(new Uri(uri));
+        Bitmap bitmap = new(stream);
+        s_legacyBitmapCache[uri] = bitmap;
+        return bitmap;
     }
 }

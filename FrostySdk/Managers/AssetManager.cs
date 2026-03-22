@@ -58,8 +58,9 @@ public static class AssetManager
     /// <para>1 - Initial Version</para>
     /// <para>2 - Nothing changed in the format just bumped up that the cache gets regenerated, bc bundled chunks did not always had their logical offset/size stored</para>
     /// <para>3 - Completely changed what needs to be stored</para>
+    /// <para>4 - Persist EBX dependency lists so references remain available from cache-backed loads</para>
     /// </summary>
-    private const uint c_cacheVersion = 3;
+    private const uint c_cacheVersion = 4;
     private const ulong c_cacheMagic = 0x02005954534F5246;
 
     /// <summary>
@@ -110,6 +111,7 @@ public static class AssetManager
         if (!ReadCache(out List<EbxAssetEntry> prePatchEbx, out List<ResAssetEntry> prePatchRes,
                 out List<ChunkAssetEntry> prePatchChunks))
         {
+            DeleteMeshVariationCache();
             Stopwatch timer = new();
 
             if (FileSystemManager.BundleFormat == BundleFormat.Dynamic2018 || FileSystemManager.BundleFormat == BundleFormat.SuperBundleManifest)
@@ -235,6 +237,30 @@ public static class AssetManager
 
         IsInitialized = true;
         return true;
+    }
+
+    private static void DeleteMeshVariationCache()
+    {
+        string cacheFileName = $"{ProfilesLibrary.InternalName}_mvdb.cache";
+        foreach (string path in new[]
+                 {
+                     Path.Combine(AppContext.BaseDirectory, "Caches", cacheFileName),
+                     Path.Combine(AppContext.BaseDirectory, cacheFileName),
+                     Path.Combine(Environment.CurrentDirectory, "Caches", cacheFileName),
+                     Path.Combine(Environment.CurrentDirectory, cacheFileName)
+                 }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+            }
+        }
     }
 
     #region -- GetEntry --
@@ -939,6 +965,12 @@ public static class AssetManager
                     Type = stream.ReadNullTerminatedString()
                 };
 
+                int dependencyCount = stream.ReadInt32();
+                for (int j = 0; j < dependencyCount; j++)
+                {
+                    entry.DependentAssets.Add(stream.ReadGuid());
+                }
+
                 entry.AddFileInfo(IFileInfo.Deserialize(stream));
 
                 int numBundles = stream.ReadInt32();
@@ -1058,6 +1090,12 @@ public static class AssetManager
 
                 stream.WriteGuid(entry.Guid);
                 stream.WriteNullTerminatedString(entry.Type);
+
+                stream.WriteInt32(entry.DependentAssets.Count);
+                foreach (Guid dependency in entry.DependentAssets)
+                {
+                    stream.WriteGuid(dependency);
+                }
 
                 IFileInfo.Serialize(stream, entry.FileInfo!);
 

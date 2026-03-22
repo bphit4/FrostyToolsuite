@@ -28,6 +28,7 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
     private bool m_previewEnabled;
     private bool m_allowProgressivePreview;
     private CancellationTokenSource? m_previewCts;
+    private CancellationTokenSource? m_filterCts;
     private double m_viewportWidth;
     private double m_viewportHeight;
     private int m_firstAvailableMip;
@@ -51,7 +52,7 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
     private bool m_showLuminance;
 
     [ObservableProperty]
-    private bool m_showCheckerboard = true;
+    private bool m_showCheckerboard;
 
     [ObservableProperty]
     private string m_zoomText = "Fit";
@@ -117,7 +118,7 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
     partial void OnChannelsChanged(TextureChannelMask value) => QueueRefreshPreview();
     partial void OnShowLuminanceChanged(bool value) => QueueRefreshPreview();
     partial void OnShowCheckerboardChanged(bool value) => OnPropertyChanged(nameof(ShowPreviewCheckerboard));
-    partial void OnFilterTextChanged(string value) => ApplyInspectorFilter();
+    partial void OnFilterTextChanged(string value) => DebounceApplyInspectorFilter();
 
     [RelayCommand]
     private void ToggleRed()
@@ -539,6 +540,61 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
         UpdateInspectorNameColumnWidth(VisibleNodes);
     }
 
+    public void RefreshNodeSubtree(InspectorNodeModel node)
+    {
+        int nodeIndex = VisibleNodes.IndexOf(node);
+        if (nodeIndex < 0)
+        {
+            return;
+        }
+
+        RemoveVisibleDescendants(VisibleNodes, nodeIndex, node.Depth);
+
+        if (node.IsExpanded)
+        {
+            node.EnsureChildrenLoaded();
+            InsertVisibleDescendants(VisibleNodes, nodeIndex + 1, node.Children.Where(static child => !child.IsPlaceholder));
+        }
+
+        UpdateInspectorNameColumnWidth(VisibleNodes);
+    }
+
+    private async void DebounceApplyInspectorFilter()
+    {
+        m_filterCts?.Cancel();
+        CancellationTokenSource cts = new();
+        m_filterCts = cts;
+
+        try
+        {
+            await Task.Delay(320, cts.Token);
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (m_filterCts == cts)
+                {
+                    ApplyInspectorFilter();
+                }
+            });
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        finally
+        {
+            if (m_filterCts == cts)
+            {
+                m_filterCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
     private void UpdateInspectorNameColumnWidth(IEnumerable<InspectorNodeModel> nodes)
     {
         if (m_hasManualInspectorNameColumnWidth)
@@ -547,23 +603,22 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
         }
 
         double width = CalculateInspectorNameColumnWidth(nodes);
-        // Reduced clamp range: min 100 (was 180), max 400 (was 560)
-        InspectorNameColumnWidth = Math.Clamp(width, 100, 400);
+        InspectorNameColumnWidth = Math.Clamp(width, 140, 620);
     }
 
     public void SetManualInspectorNameColumnWidth(double width)
     {
         m_hasManualInspectorNameColumnWidth = true;
-        InspectorNameColumnWidth = Math.Max(80, width);
+        InspectorNameColumnWidth = Math.Max(110, width);
     }
 
     private static double CalculateInspectorNameColumnWidth(IEnumerable<InspectorNodeModel> nodes)
     {
-        // Reduced floor from 180 → 100 so short property names don't waste space
-        double width = 100;
+        double width = 140;
         foreach (InspectorNodeModel node in nodes)
         {
-            double nodeWidth = 28 + (node.Depth * 14) + ((node.Name.Length + node.NameSuffix.Length) * 7.2);
+            int textLength = (node.Name?.Length ?? 0) + (node.NameSuffix?.Length ?? 0);
+            double nodeWidth = 42 + (node.Depth * 18) + (textLength * 7.8);
             width = Math.Max(width, nodeWidth);
         }
 
@@ -613,6 +668,26 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
         }
 
         return expanded;
+    }
+
+    private static void RemoveVisibleDescendants(ObservableCollection<InspectorNodeModel> visibleNodes, int nodeIndex, int parentDepth)
+    {
+        int removeIndex = nodeIndex + 1;
+        while (removeIndex < visibleNodes.Count && visibleNodes[removeIndex].Depth > parentDepth)
+        {
+            visibleNodes.RemoveAt(removeIndex);
+        }
+    }
+
+    private static void InsertVisibleDescendants(
+        ObservableCollection<InspectorNodeModel> visibleNodes,
+        int insertIndex,
+        IEnumerable<InspectorNodeModel> children)
+    {
+        foreach (InspectorNodeModel child in EnumerateVisibleNodes(children))
+        {
+            visibleNodes.Insert(insertIndex++, child);
+        }
     }
 
     public void RefreshSessionState()

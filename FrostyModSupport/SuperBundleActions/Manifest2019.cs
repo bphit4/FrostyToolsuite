@@ -33,7 +33,7 @@ internal class Manifest2019 : IDisposable
             }
         }
 
-        public bool EncodeStrings;
+        public bool EncodeStrings = false;
         private uint m_currentOffset;
         private readonly Dictionary<string, String> m_mapping = new();
         public IList<uint>? Tree;

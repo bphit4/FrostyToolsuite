@@ -61,14 +61,14 @@ public sealed unsafe partial class MemoryReader : IDisposable
     #region -- Linux --
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct iovec
+    private struct Iovec
     {
         public void* iov_base;
         public nuint iov_len;
     }
 
     [LibraryImport("libc")]
-    private static unsafe partial nint process_vm_readv(int pid, iovec* localIov, nuint localIovCount, iovec* remoteIov,
+    private static unsafe partial nint process_vm_readv(int pid, Iovec* localIov, nuint localIovCount, Iovec* remoteIov,
         nuint remoteIovCount, nuint flags);
 
     #endregion
@@ -522,8 +522,8 @@ public sealed unsafe partial class MemoryReader : IDisposable
             return true;
         }
 
-        iovec localIo = new() { iov_base = outData.Ptr, iov_len = (nuint)outData.Size };
-        iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Size };
+        Iovec localIo = new() { iov_base = outData.Ptr, iov_len = (nuint)outData.Size };
+        Iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Size };
 
         if ((bytesRead = process_vm_readv(m_process.Id, &localIo, 1, &remoteIo, 1, 0)) == -1)
         {
@@ -547,8 +547,8 @@ public sealed unsafe partial class MemoryReader : IDisposable
             }
             else
             {
-                iovec localIo = new() { iov_base = ptr, iov_len = (nuint)outData.Length };
-                iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Length };
+                Iovec localIo = new() { iov_base = ptr, iov_len = (nuint)outData.Length };
+                Iovec remoteIo = new() { iov_base = inAddress.ToPointer(), iov_len = (nuint)outData.Length };
 
                 if ((bytesRead = process_vm_readv(m_process.Id, &localIo, 1, &remoteIo, 1, 0)) == -1)
                 {

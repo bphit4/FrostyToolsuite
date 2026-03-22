@@ -14,6 +14,8 @@ public interface ISessionStateAwareDocument
 
 public class AssetEditorViewModel : ViewModelBase, IReloadableDocument
 {
+    public AssetEntry Entry => m_entry;
+
     public static string CreateDocumentKey(AssetEntry entry)
     {
         return $"{entry.Type}|{entry.Path}|{entry.Name}".ToLowerInvariant();

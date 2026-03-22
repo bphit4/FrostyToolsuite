@@ -83,6 +83,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
     private Bitmap m_cachedPointerTypeIcon = s_referenceIcon;
     private Type? m_cachedPointerTargetType;
     private Frosty.Sdk.Managers.Entries.EbxAssetEntry? m_cachedReferencedAssetEntry;
+    private bool m_skipEnsureChildrenOnExpand;
 
     public string Name { get; }
     public string NodePath { get; }
@@ -95,7 +96,8 @@ public sealed partial class InspectorNodeModel : ObservableObject
     public bool ShowExpanderSpacer => !HasChildren;
     public bool ShowExpandGlyph => HasChildren;
     public string ExpandGlyphData => IsExpanded ? "M0,0 L6,0 L3,6 Z" : "M0,0 L0,6 L6,3 Z";
-    public Thickness NameIndent => new(Depth * 14, 0, 0, 0);
+    public Thickness NameIndent => new(4 + (Depth * 12), 0, 0, 0);
+    public Thickness FlatNameIndent => new(Math.Max(0, Depth) * 12, 0, 0, 0);
     public bool IsEditable => m_setValueFromText is not null;
     public bool IsTextVisible => !IsEditing && !IsBoolean && !IsPointerRef;
     public bool IsPointerDisplayVisible => !IsEditing && !IsBoolean && IsPointerRef;
@@ -192,7 +194,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
         m_hideCollectionChildren = hideCollectionChildren;
         m_pointerBaseType = pointerBaseType;
         IsPlaceholder = isPlaceholder;
-        IsExpanded = initiallyExpanded;
+        m_isExpanded = initiallyExpanded;
 
         if (children is not null)
         {
@@ -218,7 +220,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
 
     partial void OnIsExpandedChanged(bool value)
     {
-        if (value)
+        if (value && !m_skipEnsureChildrenOnExpand)
         {
             EnsureChildrenLoaded();
         }
@@ -278,7 +280,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
 
         EnsureChildrenLoaded();
         bool changed = !IsExpanded;
-        IsExpanded = true;
+        SetExpandedState(true, childrenAlreadyLoaded: true);
 
         if (depth == 0)
         {
@@ -302,7 +304,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
 
         EnsureChildrenLoaded();
         bool changed = !IsExpanded;
-        IsExpanded = true;
+        SetExpandedState(true, childrenAlreadyLoaded: true);
 
         foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
         {
@@ -322,7 +324,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
         EnsureChildrenLoaded();
         if (!IsExpanded)
         {
-            IsExpanded = true;
+            SetExpandedState(true, childrenAlreadyLoaded: true);
             return true;
         }
 
@@ -336,7 +338,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
             else
             {
                 child.EnsureChildrenLoaded();
-                child.IsExpanded = true;
+                child.SetExpandedState(true, childrenAlreadyLoaded: true);
                 changed = true;
             }
         }
@@ -352,7 +354,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
         }
 
         EnsureChildrenLoaded();
-        bool changed = IsExpanded;
+        bool changed = !IsExpanded;
 
         foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
         {
@@ -366,7 +368,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
 
         if (IsExpanded)
         {
-            IsExpanded = false;
+            SetExpandedState(false);
             changed = true;
         }
 
@@ -379,8 +381,6 @@ public sealed partial class InspectorNodeModel : ObservableObject
         {
             return false;
         }
-
-        EnsureChildrenLoaded();
 
         bool changed = false;
         foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder && child.HasChildren && child.IsExpanded))
@@ -404,8 +404,25 @@ public sealed partial class InspectorNodeModel : ObservableObject
             return true;
         }
 
-        IsExpanded = false;
+        SetExpandedState(false);
         return true;
+    }
+
+    private void SetExpandedState(bool value, bool childrenAlreadyLoaded = false)
+    {
+        if (childrenAlreadyLoaded && value)
+        {
+            m_skipEnsureChildrenOnExpand = true;
+        }
+
+        try
+        {
+            IsExpanded = value;
+        }
+        finally
+        {
+            m_skipEnsureChildrenOnExpand = false;
+        }
     }
 
     public bool BeginEdit()
@@ -811,7 +828,9 @@ public sealed partial class InspectorNodeModel : ObservableObject
         }
 
         return selfMatch
-            ? CloneSubtree(initiallyExpanded: HasChildren)
+            // Preserve the current expansion state for direct matches so filtering
+            // does not force-load or reopen entire nested GUID-heavy subtrees.
+            ? CloneSubtree(initiallyExpanded: IsExpanded)
             : CloneWithChildren(filteredChildren, initiallyExpanded: true);
     }
 
@@ -877,6 +896,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
         IsDirty = true;
         IsModified = true;
         RefreshPresentationState();
+        RefreshChildSnapshotIfNeeded();
         OnPropertyChanged(nameof(BooleanValue));
         OnPropertyChanged(nameof(CanAddCollectionItem));
         OnPropertyChanged(nameof(CanClearCollectionItems));
@@ -896,6 +916,30 @@ public sealed partial class InspectorNodeModel : ObservableObject
         OnPropertyChanged(nameof(IsTextVisible));
         OnPropertyChanged(nameof(IsPointerDisplayVisible));
         m_onValueCommitted?.Invoke(this);
+    }
+
+    private void RefreshChildSnapshotIfNeeded()
+    {
+        if (m_childFactory is null)
+        {
+            return;
+        }
+
+        m_childrenLoaded = false;
+        Children.Clear();
+
+        if (IsExpanded)
+        {
+            EnsureChildrenLoaded();
+        }
+        else
+        {
+            Children.Add(CreatePlaceholder());
+        }
+
+        OnPropertyChanged(nameof(HasChildren));
+        OnPropertyChanged(nameof(ShowExpanderSpacer));
+        OnPropertyChanged(nameof(ShowExpandGlyph));
     }
 
     private bool TryGetCollectionForEdit(out IList? list)
@@ -1104,7 +1148,6 @@ public sealed partial class InspectorNodeModel : ObservableObject
                 m_getOwningPartition);
         }
 
-        bool hadChildren = HasChildren;
         m_childFactory = childFactory;
         Children.Clear();
 
@@ -1116,7 +1159,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
         }
 
         m_childrenLoaded = false;
-        if (IsExpanded || hadChildren)
+        if (IsExpanded)
         {
             EnsureChildrenLoaded();
         }
@@ -1698,7 +1741,6 @@ internal readonly record struct InspectorBuildOptions(
 
 public static class InspectorNodeBuilder
 {
-    private const int MaxEnumerableItems = 128;
     private static readonly Dictionary<string, int> s_layerCompPropertyOrder = new(StringComparer.Ordinal)
     {
         ["Guid"] = 0,
@@ -1825,7 +1867,7 @@ public static class InspectorNodeBuilder
 
         if (TryBuildSpecialLeaf(name, value, nodePath, out InspectorNodeModel? specialNode))
         {
-            return specialNode;
+            return specialNode!;
         }
 
         if (IsLeafValue(type, value))
@@ -1990,8 +2032,7 @@ public static class InspectorNodeBuilder
         int index = 0;
         if (enumerable is IList list)
         {
-            int count = Math.Min(list.Count, MaxEnumerableItems);
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < list.Count; i++)
             {
                 yield return BuildNode(
                     $"[{i}]",
@@ -2006,22 +2047,11 @@ public static class InspectorNodeBuilder
                     getOwningPartition: getOwningPartition);
             }
 
-            if (list.Count > MaxEnumerableItems)
-            {
-                yield return new InspectorNodeModel($"[{MaxEnumerableItems}]", "<additional items omitted>", string.Empty);
-            }
-
             yield break;
         }
 
         foreach (object? item in enumerable)
         {
-            if (index >= MaxEnumerableItems)
-            {
-                yield return new InspectorNodeModel($"[{index}]", "<additional items omitted>", string.Empty);
-                yield break;
-            }
-
             yield return BuildNode($"[{index}]", item, CombinePath(parentPath, $"[{index}]"), depth, CloneVisited(visited), onValueCommitted, null, getOwningAssetEntry: getOwningAssetEntry, getOwningPartition: getOwningPartition, options: options);
             index++;
         }
@@ -2396,10 +2426,6 @@ public static class InspectorNodeBuilder
         foreach (object? _ in enumerable)
         {
             count++;
-            if (count >= MaxEnumerableItems)
-            {
-                break;
-            }
         }
 
         return count;

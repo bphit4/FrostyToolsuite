@@ -12,6 +12,6 @@ internal static class Program
 {
     private static void Main(string[] args)
     {
-        PropertyConnection prop = new();
+        _ = new PropertyConnection();
     }
 }

@@ -4,6 +4,9 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Threading;
 using Frosty.Sdk.Ebx;
 using Frosty.Sdk.Managers;
 using Frosty.Sdk.Managers.Entries;
@@ -20,6 +23,7 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
     private List<InspectorNodeModel> m_allNodes = [];
     private HashSet<string> m_expandedPaths = new(StringComparer.OrdinalIgnoreCase);
     private bool m_hasManualInspectorNameColumnWidth;
+    private CancellationTokenSource? m_filterCts;
 
     [ObservableProperty]
     private double m_inspectorNameColumnWidth = 220;
@@ -62,7 +66,7 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
 
     partial void OnFilterTextChanged(string value)
     {
-        ApplyFilter();
+        DebounceApplyFilter();
     }
 
     public void RebuildNodes()
@@ -157,20 +161,56 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
         UpdateInspectorNameColumnWidth(VisibleNodes);
     }
 
+    private async void DebounceApplyFilter()
+    {
+        m_filterCts?.Cancel();
+        CancellationTokenSource cts = new();
+        m_filterCts = cts;
+
+        try
+        {
+            await Task.Delay(320, cts.Token);
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (m_filterCts == cts)
+                {
+                    ApplyFilter();
+                }
+            });
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        finally
+        {
+            if (m_filterCts == cts)
+            {
+                m_filterCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
     public void RefreshNodeSubtree(InspectorNodeModel node)
     {
         int nodeIndex = VisibleNodes.IndexOf(node);
         if (nodeIndex < 0)
         {
-            RefreshVisibleNodes();
             return;
         }
 
-        RemoveVisibleDescendants(nodeIndex, node.Depth);
+        RemoveVisibleDescendants(VisibleNodes, nodeIndex, node.Depth);
+
         if (node.IsExpanded)
         {
             node.EnsureChildrenLoaded();
-            InsertVisibleDescendants(nodeIndex + 1, node.Children.Where(static child => !child.IsPlaceholder));
+            InsertVisibleDescendants(VisibleNodes, nodeIndex + 1, node.Children.Where(static child => !child.IsPlaceholder));
         }
 
         UpdateInspectorNameColumnWidth(VisibleNodes);
@@ -237,21 +277,22 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
         }
 
         double width = CalculateInspectorNameColumnWidth(nodes);
-        InspectorNameColumnWidth = Math.Clamp(width, 180, 560);
+        InspectorNameColumnWidth = Math.Clamp(width, 140, 620);
     }
 
     public void SetManualInspectorNameColumnWidth(double width)
     {
         m_hasManualInspectorNameColumnWidth = true;
-        InspectorNameColumnWidth = Math.Max(80, width);
+        InspectorNameColumnWidth = Math.Max(120, width);
     }
 
     private static double CalculateInspectorNameColumnWidth(IEnumerable<InspectorNodeModel> nodes)
     {
-        double width = 180;
+        double width = 140;
         foreach (InspectorNodeModel node in nodes)
         {
-            double nodeWidth = 28 + (node.Depth * 14) + ((node.Name.Length + node.NameSuffix.Length) * 7.2);
+            int textLength = (node.Name?.Length ?? 0) + (node.NameSuffix?.Length ?? 0);
+            double nodeWidth = 42 + (node.Depth * 18) + (textLength * 7.8);
             width = Math.Max(width, nodeWidth);
         }
 
@@ -277,47 +318,24 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
         }
     }
 
-    private void RemoveVisibleDescendants(int nodeIndex, int parentDepth)
+    private static void RemoveVisibleDescendants(ObservableCollection<InspectorNodeModel> visibleNodes, int nodeIndex, int parentDepth)
     {
-        int removalIndex = nodeIndex + 1;
-        while (removalIndex < VisibleNodes.Count && VisibleNodes[removalIndex].Depth > parentDepth)
+        int removeIndex = nodeIndex + 1;
+        while (removeIndex < visibleNodes.Count && visibleNodes[removeIndex].Depth > parentDepth)
         {
-            VisibleNodes.RemoveAt(removalIndex);
+            visibleNodes.RemoveAt(removeIndex);
         }
     }
 
-    private void InsertVisibleDescendants(int insertIndex, IEnumerable<InspectorNodeModel> nodes)
+    private static void InsertVisibleDescendants(
+        ObservableCollection<InspectorNodeModel> visibleNodes,
+        int insertIndex,
+        IEnumerable<InspectorNodeModel> children)
     {
-        foreach (InspectorNodeModel node in nodes)
+        foreach (InspectorNodeModel child in EnumerateVisibleNodes(children))
         {
-            VisibleNodes.Insert(insertIndex++, node);
-
-            if (!node.IsExpanded)
-            {
-                continue;
-            }
-
-            node.EnsureChildrenLoaded();
-            InsertVisibleDescendants(insertIndex, node.Children.Where(static child => !child.IsPlaceholder));
-            insertIndex += CountVisibleDescendants(node);
+            visibleNodes.Insert(insertIndex++, child);
         }
-    }
-
-    private static int CountVisibleDescendants(InspectorNodeModel node)
-    {
-        if (!node.IsExpanded)
-        {
-            return 0;
-        }
-
-        int count = 0;
-        foreach (InspectorNodeModel child in node.Children.Where(static child => !child.IsPlaceholder))
-        {
-            count++;
-            count += CountVisibleDescendants(child);
-        }
-
-        return count;
     }
 
     public void RefreshSessionState()

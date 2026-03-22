@@ -40,9 +40,14 @@ public partial class FolderTreeNodeModel : ObservableObject
         Name = inName;
     }
 
+    public static FolderTreeNodeModel CreateEmpty()
+    {
+        return new FolderTreeNodeModel("ROOT") { IsExpanded = true };
+    }
+
     public static FolderTreeNodeModel Create()
     {
-        FolderTreeNodeModel root = new("ROOT") { IsExpanded = true };
+        FolderTreeNodeModel root = CreateEmpty();
 
         foreach (EbxAssetEntry entry in AssetManager.EnumerateEbxAssetEntries())
         {

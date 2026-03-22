@@ -8,6 +8,7 @@
              x:Class="FrostyEditor.Views.TextureAssetEditorView"
              x:Name="Root"
              x:DataType="viewModels:TextureAssetEditorViewModel"
+             Tag="{Binding InspectorNameColumnWidth}"
              d:DesignWidth="1100"
              d:DesignHeight="720">
   <UserControl.Resources>
@@ -23,17 +24,8 @@
               Height="18"
               ClipToBounds="True"
               PointerPressed="OnInspectorNamePointerPressed">
-        <Grid ColumnDefinitions="16,*"
-              Margin="{Binding NameIndent}">
-          <Path Width="7"
-                Height="7"
-                Fill="#DADADA"
-                Stretch="Uniform"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Data="{Binding ExpandGlyphData}"
-                IsVisible="{Binding ShowExpandGlyph}"/>
-          <TextBlock Grid.Column="1"
+        <Grid ColumnDefinitions="*">
+          <TextBlock Grid.Column="0"
                      VerticalAlignment="Center"
                      FontSize="10"
                      LineHeight="12"
@@ -91,18 +83,17 @@
               <StackPanel Orientation="Horizontal"
                           Spacing="4"
                           VerticalAlignment="Center">
-                <SelectableTextBlock Classes="inspector-value"
+                <SelectableTextBlock Classes="inspector-value-text"
                                      Text="{Binding PointerDisplayName}"
                                      ToolTip.Tip="{Binding PointerGuidText}"
                                      FontWeight="{Binding NameFontWeight}"/>
-                <SelectableTextBlock Classes="inspector-value"
+                <SelectableTextBlock Classes="inspector-value-text"
                                      Text="{Binding PointerDisplayPath, StringFormat=({0})}"
-                                     IsVisible="{Binding ShowPointerDisplayPath}"
-                                     Opacity="0.5"/>
+                                     IsVisible="{Binding ShowPointerDisplayPath}"/>
               </StackPanel>
             </StackPanel>
             <!-- Plain selectable text — click to select/copy, no tooltip clutter -->
-            <SelectableTextBlock Classes="inspector-value"
+            <SelectableTextBlock Classes="inspector-value-text"
                                  Text="{Binding Value}"
                                  IsVisible="{Binding IsTextVisible}"
                                  FontWeight="{Binding NameFontWeight}"/>
@@ -129,6 +120,109 @@
                      KeyDown="OnInspectorEditorKeyDown"/>
           </Grid>
         </Border>
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="InspectorRowTemplate"
+                  DataType="models:InspectorNodeModel">
+      <Grid Height="22"
+            ClipToBounds="True"
+            PointerPressed="OnInspectorRowPointerPressed"
+            ContextRequested="OnInspectorContextRequested">
+        <Grid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Copy Value" Tag="copy" Click="OnCopyMenuItemClick"/>
+            <MenuItem Header="Paste" Tag="paste" Click="OnPasteMenuItemClick"/>
+            <Separator Tag="ref-separator" IsVisible="False"/>
+            <MenuItem Header="Copy Guid" Tag="copy-guid" Click="OnCopyGuidMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Open Asset" Tag="open-asset" Click="OnOpenReferenceAssetMenuItemClick" IsVisible="False"/>
+            <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
+          </MenuFlyout>
+        </Grid.ContextFlyout>
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Grid.Column="0"
+                  Width="{Binding Tag, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  Background="Transparent"
+                  Padding="1,0,6,0"
+                  Height="22"
+                  ClipToBounds="True">
+            <Grid ColumnDefinitions="*"
+                  Margin="{Binding NameIndent}">
+              <TextBlock Grid.Column="0"
+                         VerticalAlignment="Center"
+                         Foreground="#F2F2F2"
+                         FontSize="11"
+                         LineHeight="14"
+                         FontWeight="{Binding NameFontWeight}"
+                         ClipToBounds="True"
+                         TextWrapping="NoWrap">
+                <Run Text="{Binding Name}"/>
+                <Run Text="{Binding NameSuffix}"/>
+              </TextBlock>
+            </Grid>
+          </Border>
+          <Border Grid.Column="1"
+                  Background="Transparent"
+                  Padding="6,0,10,0"
+                  Height="22"
+                  ClipToBounds="False">
+            <Grid>
+              <CheckBox IsVisible="{Binding IsBooleanVisible}"
+                        Classes="compact-checkbox"
+                        IsChecked="{Binding BooleanValue, Mode=TwoWay}"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Left"
+                        Margin="0"
+                        Padding="0"/>
+              <StackPanel IsVisible="{Binding IsPointerDisplayVisible}"
+                          Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <Image Source="{Binding PointerTypeIcon}"
+                       Width="12"
+                       Height="12"
+                       Margin="0"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="{Binding PointerTypeName}"/>
+                <StackPanel Orientation="Horizontal"
+                            Spacing="4"
+                            VerticalAlignment="Center">
+                  <SelectableTextBlock Classes="inspector-value-text"
+                                       Text="{Binding PointerDisplayName}"
+                                       ToolTip.Tip="{Binding PointerGuidText}"
+                                       FontWeight="{Binding NameFontWeight}"/>
+                  <SelectableTextBlock Classes="inspector-value-text"
+                                       Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                       IsVisible="{Binding ShowPointerDisplayPath}"/>
+                </StackPanel>
+              </StackPanel>
+              <SelectableTextBlock Classes="inspector-value-text"
+                                   Text="{Binding Value}"
+                                   IsVisible="{Binding IsTextVisible}"
+                                   FontWeight="{Binding NameFontWeight}"/>
+              <TextBox Classes="inspector-editor"
+                       Text="{Binding EditorText, Mode=TwoWay}"
+                       IsVisible="{Binding IsEditorVisible}"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Left"
+                       VerticalContentAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="11"
+                       Padding="0"
+                       Margin="0"
+                       AcceptsReturn="False"
+                       TextWrapping="NoWrap"
+                       Height="18"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                       PointerPressed="OnInspectorEditorPointerPressed"
+                       ContextRequested="OnInspectorEditorContextRequested"
+                       LostFocus="OnInspectorEditorLostFocus"
+                       KeyDown="OnInspectorEditorKeyDown"/>
+            </Grid>
+          </Border>
+        </Grid>
       </Grid>
     </DataTemplate>
   </UserControl.Resources>
@@ -158,7 +252,7 @@
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector="ListBox.inspector-name-list > ListBoxItem:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Background" Value="#303030"/>
     </Style>
 
     <!-- ── SCROLLABLE VALUE LIST ─────────────────────────────────── -->
@@ -197,7 +291,7 @@
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector="ListBox.inspector-list > ListBoxItem:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Background" Value="#303030"/>
     </Style>
 
     <!-- ── COMPACT CHECKBOX ─────────────────────────────────────── -->
@@ -267,13 +361,6 @@
     </Style>
 
     <!-- ── SELECTABLE VALUE TEXT ────────────────────────────────── -->
-    <Style Selector="SelectableTextBlock.inspector-value">
-      <Setter Property="HorizontalAlignment" Value="Left"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="FontSize" Value="10"/>
-      <Setter Property="LineHeight" Value="12"/>
-      <Setter Property="TextWrapping" Value="NoWrap"/>
-    </Style>
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,1,380">
@@ -370,38 +457,40 @@
                │  No H-scroll     │      │ H+V scrollable            │
                └─────────────────────────────────────────────────────┘ -->
           <Grid Grid.Row="1"
-                ColumnDefinitions="Auto,1,*"
+                ColumnDefinitions="Auto,8,*"
                 Margin="0,0,0,4"
                 ClipToBounds="True">
 
-            <!-- Frozen name column — vertical sync only, no H-scroll -->
-            <ListBox x:Name="InspectorNameList"
-                     Width="{Binding InspectorNameColumnWidth}"
-                     Classes="inspector-name-list"
-                     ItemsSource="{Binding VisibleNodes}"
-                     ItemTemplate="{StaticResource InspectorNameTemplate}"/>
+            <Border Width="{Binding InspectorNameColumnWidth}"
+                    Background="#363636"/>
 
             <!-- Resize grip -->
             <Border Grid.Column="1"
                     x:Name="InspectorColumnGrip"
-                    Background="#35353A"
+                    Background="Transparent"
                     Cursor="SizeWestEast"
                     PointerPressed="OnInspectorGripPressed"
                     PointerMoved="OnInspectorGripMoved"
                     PointerReleased="OnInspectorGripReleased"
-                    ZIndex="10"/>
+                    ZIndex="10">
+              <Border Width="1"
+                      Background="#35353A"
+                      HorizontalAlignment="Center"/>
+            </Border>
 
-            <!-- Scrollable value column — H+V scroll -->
-            <ListBox x:Name="InspectorValueList"
-                     Grid.Column="2"
+            <Border Grid.Column="2"
+                    Background="#292929"/>
+
+            <ListBox x:Name="InspectorList"
+                     Grid.ColumnSpan="3"
                      Classes="inspector-list"
                      ItemsSource="{Binding VisibleNodes}"
-                     ItemTemplate="{StaticResource InspectorValueTemplate}"
-                     ScrollViewer.AllowAutoHide="False"
+                     ItemTemplate="{StaticResource InspectorRowTemplate}"
+                     ScrollViewer.AllowAutoHide="True"
                      ScrollViewer.IsScrollInertiaEnabled="False"
                      ScrollViewer.IsScrollChainingEnabled="False"
-                     ScrollViewer.HorizontalScrollBarVisibility="Visible"
-                     ScrollViewer.VerticalScrollBarVisibility="Visible"/>
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
           </Grid>
         </Grid>
       </Grid>

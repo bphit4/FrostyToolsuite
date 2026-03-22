@@ -1,13 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net8.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets\FrostyApp.ico</ApplicationIcon>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <PublishSingleFile>true</PublishSingleFile>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <PlatformTarget>x64</PlatformTarget>
+        <NoWarn>$(NoWarn);NU1608;NU1701</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -23,10 +26,12 @@
         <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.10" />
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
         <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.0.10" />
+        <PackageReference Include="AssimpNet" Version="5.0.0-beta1" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
         <PackageReference Include="MessageBox.Avalonia" Version="3.1.5.1" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.7.0" />
         <PackageReference Include="Pastel" Version="5.0.0" />
+        <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     </ItemGroup>
 
@@ -34,16 +39,19 @@
     <ItemGroup>
       <ProjectReference Include="..\FrostySdk\FrostySdk.csproj" />
       <ProjectReference Include="..\FrostyModSupport\FrostyModSupport.csproj" />
+      <ProjectReference Include="..\FrostyEditor.MeshViewportHost\FrostyEditor.MeshViewportHost.csproj" />
     </ItemGroup>
 
 
     <ItemGroup>
       <None Update="Sdk\*.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Update="Profiles\*.json" CopyToOutputDirectory="PreserveNewest" />
+      <None Update="Assets\MeshViewport\eye_fallback_color.png" CopyToOutputDirectory="PreserveNewest" />
       <None Include="..\FrostySdk\ThirdParty\dpapi.dll" Link="dpapi.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="..\FrostySdk\ThirdParty\dxtex.dll" Link="dxtex.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="..\FrostySdk\ThirdParty\liblz4.dll" Link="liblz4.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="..\FrostySdk\ThirdParty\libzlib.dll" Link="libzlib.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="..\FrostySdk\ThirdParty\libzstd.dll" Link="libzstd.dll" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="thirdparty\libfbxsdk.dll" Link="thirdparty\libfbxsdk.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

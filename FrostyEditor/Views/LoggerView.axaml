@@ -3,36 +3,439 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             xmlns:models="clr-namespace:FrostyEditor.Models"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="FrostyEditor.Views.LoggerView"
+             x:Name="Root"
              x:DataType="viewModels:LoggerViewModel">
+  <UserControl.Resources>
+    <TreeDataTemplate x:Key="BookmarkNodeTemplate"
+                      DataType="models:BookmarkNodeModel"
+                      ItemsSource="{Binding Children}">
+      <Border Classes="bookmark-node-row"
+              Padding="4,1"
+              HorizontalAlignment="Stretch"
+              PointerPressed="OnBookmarkNodePointerPressed">
+        <Border.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="Open Asset"
+                      Tag="{Binding}"
+                      Click="OnOpenBookmarkMenuItemClick"
+                      IsVisible="{Binding CanOpenAsset}"/>
+            <MenuItem Header="Find Asset In Data Explorer"
+                      Tag="{Binding}"
+                      Click="OnFindBookmarkMenuItemClick"
+                      IsVisible="{Binding CanNavigateToAsset}"/>
+            <Separator/>
+            <MenuItem Header="Add Bookmark"
+                      Tag="{Binding}"
+                      Click="OnAddBookmarkMenuItemClick"/>
+            <MenuItem Header="Create Folder"
+                      Tag="{Binding}"
+                      Click="OnCreateBookmarkFolderMenuItemClick"/>
+            <MenuItem Header="Edit Name"
+                      Tag="{Binding}"
+                      Click="OnRenameBookmarkMenuItemClick"/>
+            <MenuItem Header="Delete Bookmark"
+                      Tag="{Binding}"
+                      Click="OnDeleteBookmarkMenuItemClick"/>
+            <Separator/>
+            <MenuItem Header="Copy Asset Name"
+                      Tag="{Binding}"
+                      Click="OnCopyBookmarkAssetNameMenuItemClick"
+                      IsVisible="{Binding CanNavigateToAsset}"/>
+            <MenuItem Header="Copy Asset Path"
+                      Tag="{Binding}"
+                      Click="OnCopyBookmarkAssetPathMenuItemClick"
+                      IsVisible="{Binding CanNavigateToAsset}"/>
+          </MenuFlyout>
+        </Border.ContextFlyout>
+        <Grid ColumnDefinitions="Auto,*"
+              MinHeight="18"
+              ClipToBounds="True"
+              VerticalAlignment="Center">
+          <Image Source="{Binding Icon}"
+                 Width="14"
+                 Height="14"
+                 Margin="0,0,4,0"
+                 VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="1"
+                     Text="{Binding DisplayName}"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"/>
+        </Grid>
+      </Border>
+    </TreeDataTemplate>
+  </UserControl.Resources>
   <UserControl.Styles>
     <Style Selector="TextBox#LoggerTextBox">
-      <Setter Property="Padding" Value="4,2"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="Padding" Value="2,1"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="#F0F0F0"/>
+      <Setter Property="FontSize" Value="10.5"/>
+    </Style>
+    <Style Selector="TextBox.logger-pane-textbox">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#F0F0F0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="2,1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="ToggleButton.logger-tab-toggle">
+      <Setter Property="Background" Value="#34343A"/>
+      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="3,3,0,0"/>
+      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="Margin" Value="0,0,1,0"/>
+      <Setter Property="MinWidth" Value="54"/>
+      <Setter Property="MinHeight" Value="20"/>
+      <Setter Property="FontSize" Value="10.5"/>
+    </Style>
+    <Style Selector="ToggleButton.logger-tab-toggle:checked">
+      <Setter Property="Background" Value="#3E3E45"/>
+      <Setter Property="BorderBrush" Value="#676770"/>
+    </Style>
+    <Style Selector="Border.logger-pane">
+      <Setter Property="Background" Value="#29292C"/>
+      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="Border.logger-table-header">
+      <Setter Property="Background" Value="#3A3A3F"/>
+      <Setter Property="BorderBrush" Value="#505056"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="5,2"/>
+    </Style>
+    <Style Selector="Border.logger-title-bar">
+      <Setter Property="Background" Value="#34343A"/>
+      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="BorderThickness" Value="1,1,1,0"/>
+      <Setter Property="Padding" Value="5,2"/>
+    </Style>
+    <Style Selector="Border.logger-title-bar TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="Border.logger-table-header TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="ListBox.logger-reference-list">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="ListBox.logger-reference-list ListBoxItem">
+      <Setter Property="MinHeight" Value="21"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.logger-reference-list TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="ComboBox.bookmark-context-combo">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="MinWidth" Value="150"/>
+      <Setter Property="Height" Value="22"/>
+    </Style>
+    <Style Selector="Button.bookmark-tool">
+      <Setter Property="Width" Value="22"/>
+      <Setter Property="Height" Value="22"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="#34343A"/>
+      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="Border.bookmark-node-row">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="-18,0,0,0"/>
+    </Style>
+    <Style Selector="TreeView.bookmark-tree">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="4,2,2,2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="TreeView.bookmark-tree TreeViewItem">
+      <Setter Property="MinHeight" Value="21"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
     </Style>
   </UserControl.Styles>
   <Grid RowDefinitions="Auto,*">
-    <DockPanel Margin="0,0,0,4">
-      <StackPanel DockPanel.Dock="Left">
-        <TextBlock Text="Output" Classes="section-title"/>
-        <TextBlock Text="{Binding LastEntry}" Classes="subtle" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
-      </StackPanel>
-      <TextBlock Text="{Binding EntryCount, StringFormat='{}{0} entries'}"
-                 HorizontalAlignment="Right"
-                 VerticalAlignment="Center"
-                 Foreground="{StaticResource FrostyBlueBrush}"/>
-    </DockPanel>
-    <TextBox x:Name="LoggerTextBox"
-             Grid.Row="1"
-             Text="{Binding Text}"
-             IsReadOnly="True"
-             AcceptsReturn="True"
-             TextWrapping="NoWrap"
-             FontFamily="Cascadia Mono,Consolas,monospace"
-             FontSize="11"
-             BorderBrush="#3F3F46"/>
+    <StackPanel Orientation="Horizontal">
+      <ToggleButton Classes="logger-tab-toggle"
+                    IsChecked="{Binding IsLogTabSelected}"
+                    Command="{Binding ShowLogTabCommand}"
+                    Content="Log"/>
+      <ToggleButton Classes="logger-tab-toggle"
+                    IsChecked="{Binding IsBookmarksTabSelected}"
+                    Command="{Binding ShowBookmarksTabCommand}"
+                    Content="Bookmarks"/>
+      <ToggleButton Classes="logger-tab-toggle"
+                    IsChecked="{Binding IsBundlesTabSelected}"
+                    Command="{Binding ShowBundlesTabCommand}"
+                    Content="Bundles"/>
+      <ToggleButton Classes="logger-tab-toggle"
+                    IsChecked="{Binding IsReferencesTabSelected}"
+                    Command="{Binding ShowReferencesTabCommand}"
+                    Content="References"/>
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="logger-pane">
+      <Grid RowDefinitions="*">
+          <TextBox x:Name="LoggerTextBox"
+                   Grid.Row="0"
+                   IsVisible="{Binding IsLogTabSelected}"
+                   Classes="logger-pane-textbox"
+                   Text="{Binding Text}"
+                   IsReadOnly="True"
+                   AcceptsReturn="True"
+                   TextWrapping="NoWrap"
+                   FontFamily="Cascadia Mono,Consolas,monospace"
+                   FontSize="11"/>
+
+          <Grid Grid.Row="0"
+                IsVisible="{Binding IsBookmarksTabSelected}"
+                RowDefinitions="Auto,*">
+            <Border Classes="logger-title-bar">
+              <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,8,160,*">
+                <ComboBox Grid.Column="0"
+                          Classes="bookmark-context-combo"
+                          VerticalAlignment="Center"
+                          ItemsSource="{Binding BookmarkContexts}"
+                          SelectedItem="{Binding SelectedBookmarkContext}"/>
+                <Button Grid.Column="1"
+                        Classes="bookmark-tool"
+                        Margin="6,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding AddBookmarkCommand}"
+                        ToolTip.Tip="Add Bookmark">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/AddBookmark.png" Width="14" Height="14"/>
+                </Button>
+                <Button Grid.Column="2"
+                        Classes="bookmark-tool"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding DeleteBookmarkCommand}"
+                        ToolTip.Tip="Delete Bookmark">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/RemoveBookmark.png" Width="14" Height="14"/>
+                </Button>
+                <Button Grid.Column="3"
+                        Classes="bookmark-tool"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding CreateBookmarkFolderCommand}"
+                        ToolTip.Tip="Create Folder">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/AddFolder.png" Width="14" Height="14"/>
+                </Button>
+                <Button Grid.Column="4"
+                        Classes="bookmark-tool"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding RenameBookmarkCommand}"
+                        ToolTip.Tip="Edit Name">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Rename.png" Width="14" Height="14"/>
+                </Button>
+                <TextBox Grid.Column="6"
+                         Classes="search-box"
+                         Height="22"
+                         VerticalAlignment="Center"
+                         Watermark="Filter"
+                         Text="{Binding BookmarkFilterText}"/>
+                <TextBlock Grid.Column="7"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Classes="subtle"
+                           Text="{Binding BookmarkFilterLabel}"/>
+              </Grid>
+            </Border>
+            <TreeView x:Name="BookmarksTree"
+                      Grid.Row="1"
+                      Classes="bookmark-tree"
+                      ItemsSource="{Binding FilteredBookmarkRoots}"
+                      ItemTemplate="{StaticResource BookmarkNodeTemplate}"
+                      DoubleTapped="OnBookmarkTreeDoubleTapped"/>
+          </Grid>
+
+          <Grid Grid.Row="0"
+                IsVisible="{Binding IsBundlesTabSelected}"
+                RowDefinitions="Auto,*">
+            <Border Classes="logger-title-bar">
+              <TextBlock Text="{Binding BundlesTitle}"
+                         FontWeight="SemiBold"/>
+            </Border>
+            <TextBox Grid.Row="1"
+                     Classes="logger-pane-textbox"
+                     Text="{Binding BundlesText}"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="NoWrap"
+                     FontFamily="Cascadia Mono,Consolas,monospace"
+                     FontSize="11"/>
+          </Grid>
+
+          <Grid Grid.Row="0"
+                IsVisible="{Binding IsReferencesTabSelected}"
+                RowDefinitions="Auto,*">
+            <DockPanel Margin="0,0,0,2"
+                       IsVisible="{Binding ShowReferencesStatus}">
+              <TextBlock Text="{Binding ReferencesStatus}"
+                         Margin="2,0,0,0"
+                         Classes="subtle"
+                         FontSize="11"/>
+              <TextBlock Text="Loading..."
+                         HorizontalAlignment="Right"
+                         FontSize="11"
+                         Foreground="{StaticResource FrostyBlueBrush}"
+                         IsVisible="{Binding IsReferencesLoading}"/>
+            </DockPanel>
+            <Grid Grid.Row="1" ColumnDefinitions="*,4,*">
+              <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
+                <Border Classes="logger-title-bar">
+                  <TextBlock Text="{Binding ReferencesLeftTitle}"
+                             FontWeight="SemiBold"/>
+                </Border>
+                <Grid Grid.Row="1" ColumnDefinitions="*,160">
+                  <Border Classes="logger-table-header">
+                    <TextBlock Text="Name"/>
+                  </Border>
+                  <Border Grid.Column="1" Classes="logger-table-header" BorderThickness="0,1,1,1">
+                    <TextBlock Text="Type"/>
+                  </Border>
+                </Grid>
+                <ListBox x:Name="IncomingReferencesList"
+                         Grid.Row="2"
+                         Classes="logger-reference-list"
+                         BorderThickness="1,0,1,1"
+                         ItemsSource="{Binding IncomingReferences}"
+                         DoubleTapped="OnReferenceListDoubleTapped">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:LoggerReferenceItem">
+                      <Border Padding="3,1"
+                              Background="Transparent"
+                              HorizontalAlignment="Stretch"
+                              PointerPressed="OnReferenceRowPointerPressed">
+                        <Border.ContextFlyout>
+                          <MenuFlyout>
+                            <MenuItem Header="Open Asset"
+                                      Tag="{Binding}"
+                                      Icon="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenAsset.png"
+                                      Click="OnOpenReferenceMenuItemClick"/>
+                            <MenuItem Header="Find Asset In Data Explorer"
+                                      Tag="{Binding}"
+                                      Icon="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Reference.png"
+                                      Click="OnFindReferenceMenuItemClick"/>
+                            <Separator/>
+                            <MenuItem Header="Copy Asset Name"
+                                      Tag="{Binding}"
+                                      Click="OnCopyReferenceAssetNameMenuItemClick"/>
+                            <MenuItem Header="Copy Asset Path"
+                                      Tag="{Binding}"
+                                      Click="OnCopyReferenceAssetPathMenuItemClick"/>
+                          </MenuFlyout>
+                        </Border.ContextFlyout>
+                        <Grid ColumnDefinitions="*,160">
+                          <Grid ColumnDefinitions="Auto,*" ClipToBounds="True">
+                            <Image Source="{Binding Icon}"
+                                   Grid.Column="0"
+                                   Width="14"
+                                   Height="14"
+                                   VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding NameWithPath}"
+                                       Grid.Column="1"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                          </Grid>
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Type}"
+                                     VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+
+              <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
+                <Border Classes="logger-title-bar">
+                  <TextBlock Text="{Binding ReferencesRightTitle}"
+                             FontWeight="SemiBold"/>
+                </Border>
+                <Grid Grid.Row="1" ColumnDefinitions="*,160">
+                  <Border Classes="logger-table-header">
+                    <TextBlock Text="Name"/>
+                  </Border>
+                  <Border Grid.Column="1" Classes="logger-table-header" BorderThickness="0,1,1,1">
+                    <TextBlock Text="Type"/>
+                  </Border>
+                </Grid>
+                <ListBox x:Name="OutgoingReferencesList"
+                         Grid.Row="2"
+                         Classes="logger-reference-list"
+                         BorderThickness="1,0,1,1"
+                         ItemsSource="{Binding OutgoingReferences}"
+                         DoubleTapped="OnReferenceListDoubleTapped">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:LoggerReferenceItem">
+                      <Border Padding="3,1"
+                              Background="Transparent"
+                              HorizontalAlignment="Stretch"
+                              PointerPressed="OnReferenceRowPointerPressed">
+                        <Border.ContextFlyout>
+                          <MenuFlyout>
+                            <MenuItem Header="Open Asset"
+                                      Tag="{Binding}"
+                                      Icon="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenAsset.png"
+                                      Click="OnOpenReferenceMenuItemClick"/>
+                            <MenuItem Header="Find Asset In Data Explorer"
+                                      Tag="{Binding}"
+                                      Icon="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Reference.png"
+                                      Click="OnFindReferenceMenuItemClick"/>
+                            <Separator/>
+                            <MenuItem Header="Copy Asset Name"
+                                      Tag="{Binding}"
+                                      Click="OnCopyReferenceAssetNameMenuItemClick"/>
+                            <MenuItem Header="Copy Asset Path"
+                                      Tag="{Binding}"
+                                      Click="OnCopyReferenceAssetPathMenuItemClick"/>
+                          </MenuFlyout>
+                        </Border.ContextFlyout>
+                        <Grid ColumnDefinitions="*,160">
+                          <Grid ColumnDefinitions="Auto,*" ClipToBounds="True">
+                            <Image Source="{Binding Icon}"
+                                   Grid.Column="0"
+                                   Width="14"
+                                   Height="14"
+                                   VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding NameWithPath}"
+                                       Grid.Column="1"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                          </Grid>
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Type}"
+                                     VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </Grid>
+          </Grid>
+      </Grid>
+    </Border>
   </Grid>
 </UserControl>

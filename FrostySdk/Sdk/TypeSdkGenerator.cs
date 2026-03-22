@@ -181,6 +181,11 @@ public class TypeSdkGenerator
 
         if (ProfilesLibrary.HasStrippedTypeNames && !Strings.HasStrings)
         {
+            HashSet<uint> typeHashes = Strings.TypeHashes ?? [];
+            Dictionary<uint, string> typeMapping = Strings.TypeMapping ?? [];
+            Dictionary<uint, HashSet<uint>> fieldHashes = Strings.FieldHashes ?? [];
+            Dictionary<uint, Dictionary<uint, string>> fieldMapping = Strings.FieldMapping ?? [];
+
             // try to resolve type hashes from other games
             foreach (string file in Directory.EnumerateFiles(stringsDir, "*_types.json"))
             {
@@ -195,15 +200,15 @@ public class TypeSdkGenerator
                     uint hash = HashTypeName(name);
 
                     // continue if type is not used
-                    if (!Strings.TypeHashes.Contains(hash))
+                    if (!typeHashes.Contains(hash))
                     {
                         continue;
                     }
 
                     // add type to our mapping if we haven't resolved it already
-                    if (!Strings.TypeMapping.TryGetValue(hash, out string? currentName) || string.IsNullOrEmpty(currentName))
+                    if (!typeMapping.TryGetValue(hash, out string? currentName) || string.IsNullOrEmpty(currentName))
                     {
-                        Strings.TypeMapping[hash] = name;
+                        typeMapping[hash] = name;
                     }
                     else
                     {
@@ -230,13 +235,13 @@ public class TypeSdkGenerator
                     uint typeHash = HashTypeName(type.Key);
 
                     // only continue if type is used
-                    if (!Strings.FieldHashes.TryGetValue(typeHash, out HashSet<uint>? fields))
+                    if (!fieldHashes.TryGetValue(typeHash, out HashSet<uint>? fields))
                     {
                         continue;
                     }
 
                     // same thing as before
-                    if (!Strings.FieldMapping.TryGetValue(typeHash, out Dictionary<uint, string>? dict))
+                    if (!fieldMapping.TryGetValue(typeHash, out Dictionary<uint, string>? dict))
                     {
                         continue;
                     }
@@ -271,7 +276,7 @@ public class TypeSdkGenerator
             Strings.HasStrings = true;
 
             HashSet<uint> toRemove = new();
-            foreach (KeyValuePair<uint, string> kv in Strings.TypeMapping)
+            foreach (KeyValuePair<uint, string> kv in typeMapping)
             {
                 if (string.IsNullOrEmpty(kv.Value))
                 {
@@ -279,20 +284,20 @@ public class TypeSdkGenerator
                 }
             }
 
-            FrostyLogger.Logger?.LogInfo($"Resolved {Strings.TypeMapping.Count - toRemove.Count} type names");
+            FrostyLogger.Logger?.LogInfo($"Resolved {typeMapping.Count - toRemove.Count} type names");
             FrostyLogger.Logger?.LogInfo($"{toRemove.Count} unresolved type names left");
 
             foreach (uint key in toRemove)
             {
                 // remove entry from dict
-                Strings.TypeMapping.Remove(key);
-                Strings.FieldMapping.Remove(key);
+                typeMapping.Remove(key);
+                fieldMapping.Remove(key);
             }
 
             int totalFieldNames = 0;
             int unresolvedFieldNames = 0;
 
-            foreach (Dictionary<uint,string> mapping in Strings.FieldMapping.Values)
+            foreach (Dictionary<uint,string> mapping in fieldMapping.Values)
             {
                 toRemove.Clear();
 
@@ -316,19 +321,20 @@ public class TypeSdkGenerator
             FrostyLogger.Logger?.LogInfo($"Resolved {totalFieldNames - unresolvedFieldNames} field names");
             FrostyLogger.Logger?.LogInfo($"{unresolvedFieldNames} unresolved field names left");
 
-            Strings.TypeNames.UnionWith(Strings.TypeMapping.Values);
-            foreach (KeyValuePair<uint,Dictionary<uint,string>> pair in Strings.FieldMapping)
+            HashSet<string> typeNames = Strings.TypeNames!;
+            typeNames.UnionWith(typeMapping.Values);
+            foreach (KeyValuePair<uint,Dictionary<uint,string>> pair in fieldMapping)
             {
                 HashSet<string> fields = new();
                 foreach (string name in pair.Value.Values)
                 {
                     fields.Add(name);
                 }
-                Strings.FieldNames.Add(Strings.TypeMapping[pair.Key], fields);
+                Strings.FieldNames!.Add(typeMapping[pair.Key], fields);
             }
 
             // save file and reload TypeInfo
-            File.WriteAllText(typeNamesPath, JsonSerializer.Serialize(Strings.TypeNames));
+            File.WriteAllText(typeNamesPath, JsonSerializer.Serialize(typeNames));
             File.WriteAllText(fieldNamesPath, JsonSerializer.Serialize(Strings.FieldNames));
 
             // update the typeinfo with now hopefully more typenames

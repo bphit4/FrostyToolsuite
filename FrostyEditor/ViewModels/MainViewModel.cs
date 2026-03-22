@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
@@ -57,7 +59,16 @@ public partial class MainViewModel : ViewModelBase
             Logger = logger;
         }
 
+        DataExplorer.PropertyChanged += OnDataExplorerPropertyChanged;
+        Logger.SetExplorerSelectedAsset(DataExplorer.SelectedAssetEntry);
+
         Logger.LogInfo("Editor shell initialized.");
+        MeshVariationDatabaseManager.StartBackgroundWarmup();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1500).ConfigureAwait(false);
+            MeshVariationDatabaseManager.StartFullCacheBuildIfNeeded();
+        });
     }
 
     public void AddEditor(AssetEditorViewModel inEditor)
@@ -277,7 +288,16 @@ public partial class MainViewModel : ViewModelBase
             document.IsActive = ReferenceEquals(document, value);
         }
 
+        Logger.SetActiveDocumentAsset(value?.Content as AssetEditorViewModel is AssetEditorViewModel editor ? editor.Entry : null);
         OnPropertyChanged(nameof(ActiveDocumentTitle));
+    }
+
+    private void OnDataExplorerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DataExplorerViewModel.SelectedAssetEntry))
+        {
+            Logger.SetExplorerSelectedAsset(DataExplorer.SelectedAssetEntry);
+        }
     }
 
     public void CloseDocument(DocumentModel? document)

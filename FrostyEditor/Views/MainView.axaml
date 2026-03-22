@@ -281,7 +281,19 @@
             </Grid>
           </Border>
           <Border Grid.Row="1" Padding="12">
-            <ContentControl Content="{Binding ActiveDocument.Content}" />
+            <ItemsControl ItemsSource="{Binding Documents}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <Grid />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:DocumentModel">
+                  <ContentControl Content="{Binding Content}"
+                                  IsVisible="{Binding IsActive}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
           </Border>
         </Grid>
       </Border>

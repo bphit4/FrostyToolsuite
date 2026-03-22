@@ -123,7 +123,7 @@ public class HuffmanEncodedTextArray<T> where T : notnull
     public byte[]? EncodedTexts { get; internal set; }
 
     // Dictionary representation of EncodedTextPositions created when first requested.
-    private Dictionary<T, int> m_positionsDictionary = null;
+    private Dictionary<T, int>? m_positionsDictionary;
 
     public HuffmanEncodedTextArray(IList<IdentifierPositionTuple<T>> inEncodedTextPositions, IList<bool> inEncodedTestsAsBools)
     {

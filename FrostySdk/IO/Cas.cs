@@ -60,7 +60,11 @@ public static class Cas
 
                 int compressedSize = compressor?.Compress(data, ref compBuffer, inFlags) ?? decompressedSize;
 
-                long packed = ((inFlags == CompressionFlags.ZStdUseDicts ? 1L : 0) << 56) | ((long)decompressedSize << 32) | ((byte)inType << 24) | (0x7 << 20) | compressedSize;
+                long packed = ((inFlags == CompressionFlags.ZStdUseDicts ? 1L : 0L) << 56) |
+                              ((long)decompressedSize << 32) |
+                              ((long)(byte)inType << 24) |
+                              ((long)0x7 << 20) |
+                              (uint)compressedSize;
                 stream.WriteInt64(packed, Endian.Big);
                 stream.Write(compBuffer.ToSpan(0, compressedSize));
                 compBuffer.Dispose();

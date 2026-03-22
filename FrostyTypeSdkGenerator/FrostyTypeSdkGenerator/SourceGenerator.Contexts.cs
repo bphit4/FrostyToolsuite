@@ -17,8 +17,18 @@ public sealed partial class SourceGenerator
 
         public static TypeContextEqualityComparer Instance { get; } = new();
 
-        public bool Equals(TypeContext x, TypeContext y)
+        public bool Equals(TypeContext? x, TypeContext? y)
         {
+            if (ReferenceEquals(x, y))
+            {
+                return true;
+            }
+
+            if (x is null || y is null)
+            {
+                return false;
+            }
+
             return x.Namespace == y.Namespace &&
                    x.Name == y.Name &&
                    x.IsValueType == y.IsValueType &&

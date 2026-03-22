@@ -3,20 +3,25 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia;
+using Avalonia.Threading;
+using Avalonia.Input;
 using FrostyEditor.Utils;
 using FrostyEditor.Views;
+using FrostyEditor.ViewModels;
 
 namespace FrostyEditor.Windows;
 
 public partial class MainWindow : Window
 {
     private bool m_applyingSettings;
+    private bool m_shellAttached;
 
     public MainWindow()
     {
         InitializeComponent();
         Opened += OnOpened;
         Closing += OnClosing;
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
     }
 
     public void ResetWindowSettings()
@@ -38,39 +43,15 @@ public partial class MainWindow : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
-        m_applyingSettings = true;
-        try
+        ApplyWindowSettings();
+        EnsureVisiblePlacement();
+        BringToFront();
+        if (m_shellAttached)
         {
-            if (Content is MainView mainView)
-            {
-                mainView.ApplyLayoutSettings();
-            }
-
-            string stateText = Config.Get("MainWindowState", nameof(WindowState.Maximized));
-            if (!Enum.TryParse(stateText, out WindowState state))
-            {
-                state = WindowState.Maximized;
-            }
-
-            if (state == WindowState.Normal)
-            {
-                Width = Config.Get("MainWindowWidth", Width);
-                Height = Config.Get("MainWindowHeight", Height);
-
-                int posX = Config.Get("MainWindowPosX", int.MinValue);
-                int posY = Config.Get("MainWindowPosY", int.MinValue);
-                if (posX != int.MinValue && posY != int.MinValue)
-                {
-                    Position = new PixelPoint(posX, posY);
-                }
-            }
-
-            WindowState = state;
+            return;
         }
-        finally
-        {
-            m_applyingSettings = false;
-        }
+
+        Dispatcher.UIThread.Post(AttachShellContent, DispatcherPriority.Background);
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -89,12 +70,142 @@ public partial class MainWindow : Window
 
         if (WindowState == WindowState.Normal)
         {
+            if (IsHiddenWindowPosition(Position.X, Position.Y))
+            {
+                Config.Remove("MainWindowPosX");
+                Config.Remove("MainWindowPosY");
+            }
+            else
+            {
             Config.Add("MainWindowWidth", Width);
             Config.Add("MainWindowHeight", Height);
             Config.Add("MainWindowPosX", Position.X);
             Config.Add("MainWindowPosY", Position.Y);
+            }
         }
 
         Config.Save(App.ConfigPath);
+    }
+
+    private void AttachShellContent()
+    {
+        if (m_shellAttached)
+        {
+            return;
+        }
+
+        m_shellAttached = true;
+        MainViewModel viewModel = new();
+        MainView mainView = new()
+        {
+            DataContext = viewModel
+        };
+
+        Content = mainView;
+        mainView.ApplyLayoutSettings();
+        Dispatcher.UIThread.Post(BringToFront, DispatcherPriority.Background);
+    }
+
+    private void ApplyWindowSettings()
+    {
+        m_applyingSettings = true;
+        try
+        {
+            string stateText = Config.Get("MainWindowState", nameof(WindowState.Maximized));
+            if (!Enum.TryParse(stateText, out WindowState state))
+            {
+                state = WindowState.Maximized;
+            }
+
+            if (state == WindowState.Normal)
+            {
+                Width = Config.Get("MainWindowWidth", Width);
+                Height = Config.Get("MainWindowHeight", Height);
+
+                int posX = Config.Get("MainWindowPosX", int.MinValue);
+                int posY = Config.Get("MainWindowPosY", int.MinValue);
+                if (posX != int.MinValue && posY != int.MinValue && !IsHiddenWindowPosition(posX, posY))
+                {
+                    Position = new PixelPoint(posX, posY);
+                }
+                else if (IsHiddenWindowPosition(posX, posY))
+                {
+                    Config.Remove("MainWindowPosX");
+                    Config.Remove("MainWindowPosY");
+                }
+            }
+
+            WindowState = state;
+        }
+        finally
+        {
+            m_applyingSettings = false;
+        }
+    }
+
+    private void BringToFront()
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        EnsureVisiblePlacement();
+
+        ShowInTaskbar = true;
+        Activate();
+        Topmost = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                Topmost = false;
+                Activate();
+            },
+            DispatcherPriority.Background);
+    }
+
+    private void EnsureVisiblePlacement()
+    {
+        if (!IsHiddenWindowPosition(Position.X, Position.Y))
+        {
+            return;
+        }
+
+        WindowState = WindowState.Normal;
+        Position = new PixelPoint(140, 140);
+    }
+
+    private static bool IsHiddenWindowPosition(int x, int y)
+    {
+        return x <= -30000 || y <= -30000;
+    }
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || Content is not MainView { DataContext: MainViewModel viewModel })
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.W:
+                if (viewModel.CloseActiveDocumentCommand.CanExecute(null))
+                {
+                    viewModel.CloseActiveDocumentCommand.Execute(null);
+                    e.Handled = true;
+                }
+
+                break;
+
+            case Key.D:
+                if (viewModel.CloseAllDocumentsCommand.CanExecute(null))
+                {
+                    viewModel.CloseAllDocumentsCommand.Execute(null);
+                    e.Handled = true;
+                }
+
+                break;
+        }
     }
 }

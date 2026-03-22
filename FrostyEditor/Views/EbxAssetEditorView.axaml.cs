@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FrostyEditor.Managers;
 using FrostyEditor.Models;
@@ -209,12 +210,10 @@ public partial class EbxAssetEditorView : UserControl
             if (expandAllLevels)
             {
                 node.ExpandAllDescendants();
-                RefreshInspectorRows();
             }
             else if (expandOneLevel)
             {
                 node.ExpandOneLevelProgressive();
-                RefreshInspectorRows();
             }
             else
             {
@@ -225,9 +224,9 @@ public partial class EbxAssetEditorView : UserControl
                 }
 
                 node.IsExpanded = shouldExpand;
-                RefreshInspectorRows(node);
             }
 
+            RefreshInspectorRows(node);
             e.Handled = true;
             return;
         }
@@ -252,6 +251,22 @@ public partial class EbxAssetEditorView : UserControl
         editor.Focus();
         editor.SelectAll();
         e.Handled = true;
+    }
+
+    private void OnInspectorTreeExpanded(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is TreeViewItem { DataContext: InspectorNodeModel node })
+        {
+            node.IsExpanded = true;
+        }
+    }
+
+    private void OnInspectorTreeCollapsed(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is TreeViewItem { DataContext: InspectorNodeModel node })
+        {
+            node.IsExpanded = false;
+        }
     }
 
     private void OnInspectorGripPressed(object? sender, PointerPressedEventArgs e)
@@ -295,7 +310,7 @@ public partial class EbxAssetEditorView : UserControl
 
         Point current = e.GetPosition(this);
         double maxWidth = Math.Max(140, Bounds.Width - 80);
-        viewModel.SetManualInspectorNameColumnWidth(Math.Clamp(m_inspectorColumnStartWidth + (current.X - m_inspectorGripStart.X), 80, maxWidth));
+        viewModel.SetManualInspectorNameColumnWidth(Math.Clamp(m_inspectorColumnStartWidth + (current.X - m_inspectorGripStart.X), 120, maxWidth));
         e.Handled = true;
     }
 
@@ -361,7 +376,7 @@ public partial class EbxAssetEditorView : UserControl
 
         if (node.AddCollectionItem(out string? error))
         {
-            viewModel.RebuildNodes();
+            RefreshInspectorRows(node);
             return;
         }
 
@@ -380,7 +395,7 @@ public partial class EbxAssetEditorView : UserControl
 
         if (node.ClearCollectionItems(out string? error))
         {
-            viewModel.RebuildNodes();
+            RefreshInspectorRows(node);
             return;
         }
 
@@ -545,7 +560,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.ExpandOneLevelProgressive();
-        RefreshInspectorRows();
+        RefreshInspectorRows(node);
     }
 
     private void OnExpandAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -556,7 +571,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.ExpandAllDescendants();
-        RefreshInspectorRows();
+        RefreshInspectorRows(node);
     }
 
     private void OnCollapseOneLevelMenuItemClick(object? sender, RoutedEventArgs e)
@@ -567,7 +582,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.CollapseOneLevelProgressive();
-        RefreshInspectorRows();
+        RefreshInspectorRows(node);
     }
 
     private void OnCollapseAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -578,7 +593,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.CollapseAllDescendants();
-        RefreshInspectorRows();
+        RefreshInspectorRows(node);
     }
 
     private static bool IsEmbeddedControlInteraction(object? source)
@@ -665,13 +680,46 @@ public partial class EbxAssetEditorView : UserControl
             return;
         }
 
-        if (node is not null)
+        PreserveInspectorViewport(() =>
         {
-            viewModel.RefreshNodeSubtree(node);
+            if (node is not null)
+            {
+                viewModel.RefreshNodeSubtree(node);
+                return;
+            }
+
+            viewModel.RefreshVisibleNodes();
+        });
+    }
+
+    private void PreserveInspectorViewport(Action refreshAction)
+    {
+        ListBox? inspectorList = this.FindControl<ListBox>("InspectorList");
+        ScrollViewer? scrollViewer = inspectorList?
+            .GetVisualDescendants()
+            .OfType<ScrollViewer>()
+            .FirstOrDefault();
+
+        if (scrollViewer is null)
+        {
+            refreshAction();
             return;
         }
 
-        viewModel.RefreshVisibleNodes();
+        Vector offset = scrollViewer.Offset;
+        refreshAction();
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            ScrollViewer? refreshedScrollViewer = inspectorList?
+                .GetVisualDescendants()
+                .OfType<ScrollViewer>()
+                .FirstOrDefault();
+            if (refreshedScrollViewer is not null)
+            {
+                refreshedScrollViewer.Offset = offset;
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void OnPropertiesToggleChanged(object? sender, RoutedEventArgs e)

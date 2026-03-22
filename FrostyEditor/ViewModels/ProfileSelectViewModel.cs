@@ -340,9 +340,22 @@ public partial class ProfileSelectViewModel : WindowViewModel
         if (await SetupFrostySdk(startupProgress))
         {
             CompleteStartupStep(m_finishStartupStep, "Editor shell ready.");
-            desktopLifetime.MainWindow = new MainWindow();
-            desktopLifetime.MainWindow.Show();
-            CloseWindow?.Invoke();
+            MainWindow mainWindow = new();
+            desktopLifetime.MainWindow = mainWindow;
+            mainWindow.Show();
+            mainWindow.Activate();
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (mainWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
+                {
+                    mainWindow.WindowState = Avalonia.Controls.WindowState.Normal;
+                }
+
+                mainWindow.Topmost = true;
+                mainWindow.Activate();
+                mainWindow.Topmost = false;
+                CloseWindow?.Invoke();
+            }, DispatcherPriority.Background);
             return;
         }
 

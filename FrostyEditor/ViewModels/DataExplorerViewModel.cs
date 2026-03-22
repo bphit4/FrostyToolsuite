@@ -31,14 +31,18 @@ namespace FrostyEditor.ViewModels;
 public partial class DataExplorerViewModel : ViewModelBase
 {
     private readonly MenuItem m_revertAssetMenuItem;
-    private readonly FolderTreeNodeModel m_root;
+    private FolderTreeNodeModel m_root;
     private FolderTreeNodeModel m_filteredRoot;
     private IReadOnlyList<AssetModel> m_currentAssets = Array.Empty<AssetModel>();
     private FolderTreeNodeModel? m_selectedFolderNode;
     private AssetModel? m_selectedAsset;
     private CancellationTokenSource? m_filterCts;
+    private readonly List<string> m_allAssetTypes = ["All"];
     private DateTime m_lastFolderTapUtc = DateTime.MinValue;
     private bool m_suppressImmediateFilterApply;
+    private bool m_suppressAssetTypeSearchSync;
+    private Task? m_initialLoadTask;
+    private int m_initialLoadStarted;
 
     [ObservableProperty]
     private HierarchicalTreeDataGridSource<FolderTreeNodeModel> m_folderSource;
@@ -89,6 +93,9 @@ public partial class DataExplorerViewModel : ViewModelBase
     private string m_selectedAssetTypeFilter = "All";
 
     [ObservableProperty]
+    private string m_assetTypeSearchText = string.Empty;
+
+    [ObservableProperty]
     private bool m_showModifiedOnly;
 
     [ObservableProperty]
@@ -105,11 +112,12 @@ public partial class DataExplorerViewModel : ViewModelBase
     public LegacyExplorerViewModel LegacyExplorer { get; } = new();
     public bool IsDataExplorerSelected => SelectedExplorerTabIndex == 0;
     public bool IsLegacyExplorerSelected => SelectedExplorerTabIndex == 1;
+    public AssetEntry? SelectedAssetEntry => m_selectedAsset?.Entry;
     public EbxAssetEntry? SelectedEbxAssetEntry => m_selectedAsset?.Entry as EbxAssetEntry;
 
     public DataExplorerViewModel()
     {
-        m_root = FolderTreeNodeModel.Create();
+        m_root = FolderTreeNodeModel.CreateEmpty();
         m_filteredRoot = m_root;
         FolderSource = CreateFolderSource(m_filteredRoot);
 
@@ -147,6 +155,8 @@ public partial class DataExplorerViewModel : ViewModelBase
                 new MenuItem { Header = "Expand", Command = ExpandSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png") },
                 new MenuItem { Header = "Collapse", Command = CollapseSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/CloseFolder.png") },
                 new Separator(),
+                new MenuItem { Header = "Copy Folder Path", Command = CopySelectedFolderPathCommand },
+                new Separator(),
                 new MenuItem { Header = "Revert Folder", Command = RevertSelectedFolderCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Revert.png") }
             }
         };
@@ -166,16 +176,79 @@ public partial class DataExplorerViewModel : ViewModelBase
                 new MenuItem { Header = "Open", Command = OpenAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenAsset.png") },
                 new MenuItem { Header = "Export", Command = ExportAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Export.png") },
                 new MenuItem { Header = "Import", Command = ImportAssetCommand, Icon = CreateMenuIcon("avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Import.png") },
+                new Separator(),
+                new MenuItem { Header = "Copy Asset Name", Command = CopySelectedAssetNameCommand },
+                new MenuItem { Header = "Copy Asset Path", Command = CopySelectedAssetPathCommand },
+                new Separator(),
                 m_revertAssetMenuItem
             }
         };
         AssetContextMenu.Opening += (_, _) => UpdateAssetContextMenuVisibility();
 
-        FolderCount = CountFolders(m_root);
-        TotalAssetCount = CountAssets(m_root);
-        PopulateAvailableAssetTypes();
+        FolderCount = 0;
+        TotalAssetCount = 0;
         m_selectedFolderNode = m_filteredRoot;
         SelectedFolderName = m_filteredRoot.Name;
+        m_currentAssets = m_filteredRoot.GetSortedAssets();
+        RefreshAssetList();
+        _ = EnsureLoadedAsync();
+    }
+
+    public Task EnsureLoadedAsync()
+    {
+        if (Interlocked.Exchange(ref m_initialLoadStarted, 1) != 0)
+        {
+            return m_initialLoadTask ?? Task.CompletedTask;
+        }
+
+        FrostyLogger.Logger?.LogInfo("Loading data explorer in background...");
+        m_initialLoadTask = Task.Run(() =>
+        {
+            try
+            {
+                FolderTreeNodeModel root = FolderTreeNodeModel.Create();
+                int folderCount = CountFolders(root);
+                int assetCount = CountAssets(root);
+                string[] assetTypes = EnumerateAssetTypes(root).ToArray();
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ApplyInitialTree(root, folderCount, assetCount, assetTypes);
+                    FrostyLogger.Logger?.LogInfo($"Data explorer ready ({assetCount} assets).");
+                });
+            }
+            catch (Exception ex)
+            {
+                FrostyLogger.Logger?.LogWarning($"Failed to load data explorer: {ex.Message}");
+            }
+        });
+
+        return m_initialLoadTask;
+    }
+
+    private void ApplyInitialTree(FolderTreeNodeModel root, int folderCount, int assetCount, IReadOnlyList<string> assetTypes)
+    {
+        m_root = root;
+        FolderCount = folderCount;
+        TotalAssetCount = assetCount;
+
+        m_suppressImmediateFilterApply = true;
+        try
+        {
+            SetAvailableAssetTypes(assetTypes);
+            SelectedAssetTypeFilter = "All";
+        }
+        finally
+        {
+            m_suppressImmediateFilterApply = false;
+        }
+
+        m_filteredRoot = IsFilterActive()
+            ? FolderTreeNodeModel.CreateFiltered(m_root, BuildAssetPredicate())
+            : m_root;
+        m_selectedFolderNode = m_filteredRoot;
+        SelectedFolderName = m_filteredRoot.Name;
+        FolderSource = CreateFolderSource(m_filteredRoot);
         m_currentAssets = m_filteredRoot.GetSortedAssets();
         RefreshAssetList();
     }
@@ -208,6 +281,13 @@ public partial class DataExplorerViewModel : ViewModelBase
         {
             TextureOperationResult result = await TextureAssetOperations.ExportWithPickerAsync(entry);
             LogTextureOperationResult(result);
+            return;
+        }
+
+        if (MeshAssetOperations.IsMeshAsset(entry))
+        {
+            MeshOperationResult result = await MeshAssetOperations.ExportWithPickerAsync(entry);
+            LogMeshOperationResult(result);
             return;
         }
 
@@ -287,6 +367,20 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
+        if (MeshAssetOperations.IsMeshAsset(entry))
+        {
+            MeshOperationResult result = await MeshAssetOperations.ImportWithPickerAsync(entry);
+            LogMeshOperationResult(result);
+            if (result.Success)
+            {
+                App.MainViewModel?.RefreshDocumentByKey(AssetEditorViewModel.CreateDocumentKey(entry));
+                UpdateAssetContextMenuVisibility();
+                RefreshAssetList();
+            }
+
+            return;
+        }
+
         const string message = "Import is only wired for texture assets right now. Other asset writeback editors still need to be ported.";
         FrostyLogger.Logger?.LogWarning(message);
     }
@@ -304,6 +398,15 @@ public partial class DataExplorerViewModel : ViewModelBase
             TextureOperationResult result = TextureAssetOperations.Revert(entry);
             LogTextureOperationResult(result);
 
+            if (!result.Success)
+            {
+                return Task.CompletedTask;
+            }
+        }
+        else if (MeshAssetOperations.IsMeshAsset(entry))
+        {
+            MeshOperationResult result = MeshAssetOperations.Revert(entry);
+            LogMeshOperationResult(result);
             if (!result.Success)
             {
                 return Task.CompletedTask;
@@ -328,6 +431,51 @@ public partial class DataExplorerViewModel : ViewModelBase
         RefreshAssetList();
         UpdateSelectedAssetDetails(m_selectedAsset);
         return Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task CopySelectedFolderPath()
+    {
+        string? folderPath = GetFolderPathText(m_selectedFolderNode);
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(folderPath))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy folder path because the clipboard is unavailable.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopySelectedAssetName()
+    {
+        string? assetName = m_selectedAsset?.Entry?.Filename;
+        if (string.IsNullOrWhiteSpace(assetName))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(assetName))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy asset name because the clipboard is unavailable.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopySelectedAssetPath()
+    {
+        string? assetPath = GetAssetPathText(m_selectedAsset);
+        if (string.IsNullOrWhiteSpace(assetPath))
+        {
+            return;
+        }
+
+        if (!await ClipboardService.SetTextAsync(assetPath))
+        {
+            FrostyLogger.Logger?.LogWarning("Unable to copy asset path because the clipboard is unavailable.");
+        }
     }
 
     [RelayCommand]
@@ -384,6 +532,15 @@ public partial class DataExplorerViewModel : ViewModelBase
                     FrostyLogger.Logger?.LogWarning(result.Message);
                 }
             }
+            else if (MeshAssetOperations.IsMeshAsset(entry))
+            {
+                MeshOperationResult result = MeshAssetOperations.Revert(entry);
+                success = result.Success;
+                if (!success)
+                {
+                    FrostyLogger.Logger?.LogWarning(result.Message);
+                }
+            }
             else
             {
                 success = AssetManager.RevertEbx(entry.Name);
@@ -431,7 +588,24 @@ public partial class DataExplorerViewModel : ViewModelBase
 
     partial void OnSelectedAssetTypeFilterChanged(string value)
     {
+        if (!m_suppressAssetTypeSearchSync)
+        {
+            AssetTypeSearchText = string.Equals(value, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : value;
+        }
+
         if (!m_suppressImmediateFilterApply)
+        {
+            RebuildFilteredTree();
+        }
+    }
+
+    partial void OnAssetTypeSearchTextChanged(string value)
+    {
+        ApplyAvailableAssetTypeFilter();
+
+        if (!m_suppressImmediateFilterApply &&
+            string.IsNullOrWhiteSpace(value) &&
+            string.Equals(SelectedAssetTypeFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
             RebuildFilteredTree();
         }
@@ -464,12 +638,16 @@ public partial class DataExplorerViewModel : ViewModelBase
             m_selectedAsset = null;
             UpdateSelectedAssetDetails(null);
             UpdateAssetContextMenuVisibility();
+            OnPropertyChanged(nameof(SelectedAssetEntry));
+            OnPropertyChanged(nameof(SelectedEbxAssetEntry));
             return;
         }
 
         m_selectedAsset = asset;
         UpdateSelectedAssetDetails(asset);
         UpdateAssetContextMenuVisibility();
+        OnPropertyChanged(nameof(SelectedAssetEntry));
+        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
     }
 
     public void HandleFolderDoubleTapped(FolderTreeNodeModel? clickedNode)
@@ -507,6 +685,16 @@ public partial class DataExplorerViewModel : ViewModelBase
         clickedNode.IsExpanded = !clickedNode.IsExpanded;
     }
 
+    public void SelectFolderFromPointer(FolderTreeNodeModel? clickedNode)
+    {
+        if (clickedNode is null)
+        {
+            return;
+        }
+
+        SelectFolder(clickedNode);
+    }
+
     public void HandleAssetDoubleTapped()
     {
         if (OpenAssetCommand.CanExecute(null))
@@ -525,6 +713,8 @@ public partial class DataExplorerViewModel : ViewModelBase
         m_selectedAsset = clickedAsset;
         UpdateSelectedAssetDetails(clickedAsset);
         UpdateAssetContextMenuVisibility();
+        OnPropertyChanged(nameof(SelectedAssetEntry));
+        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
     }
 
     [RelayCommand]
@@ -547,7 +737,7 @@ public partial class DataExplorerViewModel : ViewModelBase
 
         try
         {
-            await Task.Delay(120, cts.Token);
+            await Task.Delay(280, cts.Token);
             if (cts.IsCancellationRequested)
             {
                 return;
@@ -633,6 +823,8 @@ public partial class DataExplorerViewModel : ViewModelBase
         {
             canRevert = TextureAssetOperations.IsTextureAsset(entry)
                 ? TextureAssetOperations.IsModified(entry)
+                : MeshAssetOperations.IsMeshAsset(entry)
+                    ? MeshAssetOperations.IsModified(entry)
                 : AssetManager.IsEbxModified(entry.Name);
         }
         m_revertAssetMenuItem.IsVisible = canRevert;
@@ -653,6 +845,43 @@ public partial class DataExplorerViewModel : ViewModelBase
         SelectedAssetPath = $"Path: {asset.Entry.Path}";
     }
 
+    private static string? GetAssetPathText(AssetModel? asset)
+    {
+        return asset?.Entry?.Name;
+    }
+
+    private static string? GetFolderPathText(FolderTreeNodeModel? folder)
+    {
+        if (folder is null)
+        {
+            return null;
+        }
+
+        List<string> segments = new();
+        for (FolderTreeNodeModel? current = folder; current is not null; current = current.Parent)
+        {
+            segments.Add(current.Name);
+        }
+
+        segments.Reverse();
+        if (segments.Count == 0)
+        {
+            return null;
+        }
+
+        if (segments.Count == 1 && string.Equals(segments[0], "ROOT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ROOT";
+        }
+
+        if (string.Equals(segments[0], "ROOT", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.RemoveAt(0);
+        }
+
+        return string.Join('/', segments);
+    }
+
     public void RefreshExplorerState(bool rebuildTree = true)
     {
         if (rebuildTree)
@@ -668,7 +897,7 @@ public partial class DataExplorerViewModel : ViewModelBase
         UpdateSelectedAssetDetails(m_selectedAsset);
     }
 
-    public void RevealAsset(EbxAssetEntry entry, bool openAsset = false)
+    public void RevealAsset(AssetEntry entry, bool openAsset = false)
     {
         ShowDataExplorerTab();
 
@@ -694,13 +923,25 @@ public partial class DataExplorerViewModel : ViewModelBase
         }
 
         HandleAssetTapped(asset);
-        if (openAsset)
+        if (openAsset && entry is EbxAssetEntry)
         {
             OpenAsset();
         }
     }
 
     private static void LogTextureOperationResult(TextureOperationResult result)
+    {
+        if (result.Success)
+        {
+            FrostyLogger.Logger?.LogInfo(result.Message);
+        }
+        else
+        {
+            FrostyLogger.Logger?.LogWarning(result.Message);
+        }
+    }
+
+    private static void LogMeshOperationResult(MeshOperationResult result)
     {
         if (result.Success)
         {
@@ -816,19 +1057,58 @@ public partial class DataExplorerViewModel : ViewModelBase
         m_suppressImmediateFilterApply = true;
         try
         {
-            AvailableAssetTypes.Clear();
-            AvailableAssetTypes.Add("All");
-
-            foreach (string type in EnumerateAssetTypes(m_root))
-            {
-                AvailableAssetTypes.Add(type);
-            }
-
+            SetAvailableAssetTypes(EnumerateAssetTypes(m_root));
             SelectedAssetTypeFilter = "All";
         }
         finally
         {
             m_suppressImmediateFilterApply = false;
+        }
+    }
+
+    private void SetAvailableAssetTypes(IEnumerable<string> assetTypes)
+    {
+        m_allAssetTypes.Clear();
+        m_allAssetTypes.Add("All");
+
+        foreach (string type in assetTypes)
+        {
+            if (!m_allAssetTypes.Any(existing => string.Equals(existing, type, StringComparison.OrdinalIgnoreCase)))
+            {
+                m_allAssetTypes.Add(type);
+            }
+        }
+
+        ApplyAvailableAssetTypeFilter();
+    }
+
+    private void ApplyAvailableAssetTypeFilter()
+    {
+        string filter = (AssetTypeSearchText ?? string.Empty).Trim();
+        List<string> filteredTypes = m_allAssetTypes
+            .Where(type =>
+                string.Equals(type, "All", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(filter) ||
+                type.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        AvailableAssetTypes.Clear();
+        foreach (string type in filteredTypes)
+        {
+            AvailableAssetTypes.Add(type);
+        }
+
+        if (!AvailableAssetTypes.Contains(SelectedAssetTypeFilter ?? "All"))
+        {
+            m_suppressAssetTypeSearchSync = true;
+            try
+            {
+                SelectedAssetTypeFilter = "All";
+            }
+            finally
+            {
+                m_suppressAssetTypeSearchSync = false;
+            }
         }
     }
 

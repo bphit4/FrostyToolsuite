@@ -48,6 +48,24 @@
       <Setter Property="FontSize" Value="11.5"/>
     </Style>
 
+    <Style Selector="TextBlock.inspector-value-text">
+      <Setter Property="Foreground" Value="#F2F2F2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="LineHeight" Value="14"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="SelectableTextBlock.inspector-value-text">
+      <Setter Property="Foreground" Value="#F2F2F2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="LineHeight" Value="14"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
     <Style Selector="Button.toolbar">
       <Setter Property="Padding" Value="9,3"/>
       <Setter Property="CornerRadius" Value="3"/>
@@ -101,7 +119,88 @@
     <Style Selector="TreeViewItem">
       <Setter Property="Margin" Value="0"/>
       <Setter Property="Padding" Value="0"/>
-      <Setter Property="MinHeight" Value="18"/>
+      <Setter Property="MinHeight" Value="22"/>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0,4,8,4"/>
+      <Setter Property="ScrollViewer.AllowAutoHide" Value="True"/>
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+      <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree TreeViewItem">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="MinHeight" Value="22"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid RowDefinitions="Auto,*"
+                ColumnDefinitions="12,*">
+            <Border x:Name="Bd"
+                    Grid.Row="0"
+                    Grid.ColumnSpan="2"
+                    Background="Transparent"
+                    MinHeight="22">
+            </Border>
+            <ToggleButton x:Name="Expander"
+                          Grid.Row="0"
+                          Grid.Column="0"
+                          Width="12"
+                          Height="22"
+                          Margin="0"
+                          Padding="0"
+                          Background="Transparent"
+                          BorderBrush="Transparent"
+                          BorderThickness="0"
+                          ClickMode="Press"
+                          IsVisible="{ReflectionBinding DataContext.ShowExpandGlyph, RelativeSource={RelativeSource TemplatedParent}}"
+                          IsChecked="{ReflectionBinding DataContext.IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+              <Path x:Name="ExpandPath"
+                    Width="5"
+                    Height="5"
+                    Fill="#DADADA"
+                    Stretch="Uniform"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Data="{ReflectionBinding DataContext.ExpandGlyphData, RelativeSource={RelativeSource TemplatedParent}}"/>
+            </ToggleButton>
+            <ContentPresenter x:Name="PART_HeaderPresenter"
+                              Grid.Row="0"
+                              Grid.Column="1"
+                              Content="{TemplateBinding Header}"
+                              ContentTemplate="{TemplateBinding HeaderTemplate}"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"/>
+            <ItemsPresenter x:Name="PART_ItemsPresenter"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            IsVisible="{ReflectionBinding DataContext.IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
+                            Margin="0"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree TreeViewItem:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree TreeViewItem:selected /template/ Border#Bd">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree TreeViewItem:pointerover /template/ Path#ExpandPath">
+      <Setter Property="Fill" Value="#FFFFFF"/>
+    </Style>
+
+    <Style Selector="TreeView.inspector-tree TreeViewItem:selected /template/ Path#ExpandPath">
+      <Setter Property="Fill" Value="#FFFFFF"/>
     </Style>
 
     <Style Selector="TreeDataGrid">
@@ -111,11 +210,11 @@
     </Style>
 
     <Style Selector="TreeDataGridRow">
-      <Setter Property="MinHeight" Value="20"/>
+      <Setter Property="MinHeight" Value="21"/>
     </Style>
 
     <Style Selector="TreeDataGridCell">
-      <Setter Property="Padding" Value="2,0"/>
+      <Setter Property="Padding" Value="3,0"/>
     </Style>
 
     <Style Selector="TreeDataGrid ToggleButton">
@@ -123,18 +222,18 @@
       <Setter Property="BorderBrush" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="0"/>
-      <Setter Property="MinWidth" Value="16"/>
-      <Setter Property="MinHeight" Value="16"/>
+      <Setter Property="MinWidth" Value="18"/>
+      <Setter Property="MinHeight" Value="18"/>
       <Setter Property="HorizontalAlignment" Value="Center"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
       <Setter Property="Template">
         <ControlTemplate>
           <Border Background="Transparent"
-                  Width="16"
-                  Height="16">
+                  Width="18"
+                  Height="18">
             <Path x:Name="ExpandPath"
-                  Width="7"
-                  Height="7"
+                  Width="8"
+                  Height="8"
                   Fill="#DADADA"
                   Stretch="Uniform"
                   HorizontalAlignment="Center"

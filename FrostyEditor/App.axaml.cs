@@ -18,6 +18,7 @@ public partial class App : Application
 
     public override void Initialize()
     {
+        Environment.CurrentDirectory = AppContext.BaseDirectory;
         AvaloniaXamlLoader.Load(this);
         Config.Load(ConfigPath);
         TextBoxContextMenuHelper.Initialize();
@@ -28,7 +29,20 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.Startup += (_, _) => Debug.WriteLine("App startup");
-            desktop.Exit += (_, _) => Debug.WriteLine("App exit");
+            desktop.Exit += (_, _) =>
+            {
+                Debug.WriteLine("App exit");
+                try
+                {
+                    if (desktop.MainWindow is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+                catch
+                {
+                }
+            };
 
             desktop.MainWindow = ViewWindow.Create<ProfileSelectViewModel>();
             Debug.WriteLine($"MainWindow assigned: {desktop.MainWindow.GetType().Name}");

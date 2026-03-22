@@ -162,10 +162,8 @@ public partial class FrostyModExecutor
                     break;
                 case BundleFormat.SuperBundleManifest:
                     throw new NotImplementedException();
-                    break;
                 case BundleFormat.Kelvin:
                     throw new NotImplementedException();
-                    break;
             }
         }
 

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FrostyEditor.Models;
 using FrostyEditor.ViewModels;
@@ -105,6 +106,15 @@ public partial class DataExplorerView : UserControl
         }
     }
 
+    private void FolderTree_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is DataExplorerViewModel viewModel &&
+            e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            viewModel.SelectFolderFromPointer(FindFolderNode(e.Source));
+        }
+    }
+
     private void AssetsTree_OnDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is DataExplorerViewModel viewModel)
@@ -149,12 +159,39 @@ public partial class DataExplorerView : UserControl
         }
     }
 
+    private void LegacyFolderTree_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is DataExplorerViewModel viewModel &&
+            e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            viewModel.LegacyExplorer.SelectFolderFromPointer(FindLegacyFolderNode(e.Source));
+        }
+    }
+
     private void LegacyAssetsTree_OnDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is DataExplorerViewModel viewModel)
         {
             viewModel.LegacyExplorer.HandleAssetDoubleTapped();
         }
+    }
+
+    private void LegacyAssetsTree_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is DataExplorerViewModel viewModel)
+        {
+            viewModel.LegacyExplorer.HandleAssetTapped(FindLegacyAssetNode(e.Source));
+        }
+    }
+
+    private void TypeFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        OpenTypeComboIfNeeded(sender as TextBox, "DataTypeCombo");
+    }
+
+    private void LegacyTypeFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        OpenTypeComboIfNeeded(sender as TextBox, "LegacyTypeCombo");
     }
 
     private static bool IsExpanderInteraction(object? source)
@@ -181,6 +218,44 @@ public partial class DataExplorerView : UserControl
         }
 
         return false;
+    }
+
+    private void OpenTypeComboIfNeeded(TextBox? textBox, string comboName)
+    {
+        if (textBox is null || !textBox.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        string filterText = textBox.Text?.Trim() ?? string.Empty;
+        ComboBox? combo = this.FindControl<ComboBox>(comboName);
+        if (combo is null || !combo.IsEnabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(filterText))
+        {
+            if (combo.IsDropDownOpen)
+            {
+                combo.IsDropDownOpen = false;
+            }
+
+            return;
+        }
+
+        if (combo.IsDropDownOpen)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (textBox.IsKeyboardFocusWithin && !string.IsNullOrWhiteSpace(textBox.Text) && !combo.IsDropDownOpen)
+            {
+                combo.IsDropDownOpen = true;
+            }
+        }, DispatcherPriority.Background);
     }
 
     private static FolderTreeNodeModel? FindFolderNode(object? source)
@@ -245,6 +320,30 @@ public partial class DataExplorerView : UserControl
                 foreach (Visual visual in visualElement.GetVisualAncestors())
                 {
                     if (visual is StyledElement styledElement && styledElement.DataContext is AssetModel asset)
+                    {
+                        return asset;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static LegacyAssetModel? FindLegacyAssetNode(object? source)
+    {
+        if (source is StyledElement element)
+        {
+            if (element.DataContext is LegacyAssetModel directAsset)
+            {
+                return directAsset;
+            }
+
+            if (element is Visual visualElement)
+            {
+                foreach (Visual visual in visualElement.GetVisualAncestors())
+                {
+                    if (visual is StyledElement styledElement && styledElement.DataContext is LegacyAssetModel asset)
                     {
                         return asset;
                     }

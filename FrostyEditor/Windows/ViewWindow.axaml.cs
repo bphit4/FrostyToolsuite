@@ -24,6 +24,7 @@ public partial class ViewWindow : Window
         Content = new ViewLocator().Build(inViewModel) ?? new TextBlock { Text = inViewModel.GetType().Name };
         m_settingsPrefix = GetSettingsPrefix(inViewModel);
         ApplySavedWindowPosition();
+        Opened += (_, _) => EnsureVisiblePlacement();
 
         inViewModel.CloseWindow = () =>
         {
@@ -73,6 +74,12 @@ public partial class ViewWindow : Window
             return;
         }
 
+        if (IsHiddenWindowPosition(posX, posY))
+        {
+            ClearSavedWindowPosition();
+            return;
+        }
+
         Position = new PixelPoint(posX, posY);
     }
 
@@ -83,8 +90,41 @@ public partial class ViewWindow : Window
             return;
         }
 
+        if (IsHiddenWindowPosition(Position.X, Position.Y))
+        {
+            ClearSavedWindowPosition();
+            return;
+        }
+
         Config.Add($"{m_settingsPrefix}PosX", Position.X);
         Config.Add($"{m_settingsPrefix}PosY", Position.Y);
         Config.Save(App.ConfigPath);
+    }
+
+    private void EnsureVisiblePlacement()
+    {
+        if (!IsHiddenWindowPosition(Position.X, Position.Y))
+        {
+            return;
+        }
+
+        Position = new PixelPoint(120, 120);
+    }
+
+    private void ClearSavedWindowPosition()
+    {
+        if (string.IsNullOrWhiteSpace(m_settingsPrefix))
+        {
+            return;
+        }
+
+        Config.Remove($"{m_settingsPrefix}PosX");
+        Config.Remove($"{m_settingsPrefix}PosY");
+        Config.Save(App.ConfigPath);
+    }
+
+    private static bool IsHiddenWindowPosition(int x, int y)
+    {
+        return x <= -30000 || y <= -30000;
     }
 }

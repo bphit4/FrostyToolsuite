@@ -30,7 +30,9 @@ public readonly struct CasFileIdentifier : IEquatable<CasFileIdentifier>, ICompa
 
     public static uint ToFileIdentifier(CasFileIdentifier file)
     {
-        return (uint)((file.IsPatch ? 1 << 16 : 0) | (file.InstallChunkIndex << 8) | file.CasIndex);
+        uint patchBit = file.IsPatch ? (1u << 16) : 0u;
+        uint casIndex = unchecked((uint)file.CasIndex);
+        return patchBit | (file.InstallChunkIndex << 8) | casIndex;
     }
 
     public static ulong ToFileIdentifierLong(CasFileIdentifier file)
@@ -40,7 +42,9 @@ public readonly struct CasFileIdentifier : IEquatable<CasFileIdentifier>, ICompa
 
     public static uint ToManifestFileIdentifier(CasFileIdentifier file)
     {
-        return (uint)((file.IsPatch ? 1 << 8 : 0) | (file.InstallChunkIndex << 12) | (file.CasIndex - 1));
+        uint patchBit = file.IsPatch ? (1u << 8) : 0u;
+        uint casIndex = unchecked((uint)(file.CasIndex - 1));
+        return patchBit | (file.InstallChunkIndex << 12) | casIndex;
     }
 
     public CasFileIdentifier(bool inIsPatch, uint inInstallChunkIndex, int inCasIndex)

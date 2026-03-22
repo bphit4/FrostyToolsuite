@@ -448,7 +448,9 @@ public partial {(typeContext.IsValueType ? "struct" : "class")} {typeContext.Nam
         string constructor = string.Empty;
         foreach (FieldContext field in typeContext.Fields)
         {
-            string prop, name = field.Name.Remove(0, 1);
+            string prop;
+            string name = field.Name.Remove(0, 1);
+            string safeName = GetSafePropertyName(typeContext, name);
             if (meta is not null && meta.TryGetValue(name, out MetaProperty metaProp) && metaProp.IsOverride)
             {
                 meta.Remove(name);
@@ -456,7 +458,7 @@ public partial {(typeContext.IsValueType ? "struct" : "class")} {typeContext.Nam
                 prop = @$"
 {string.Join("\n", field.Attributes.Select(static attr => $"    [{attr}]"))}
 {metaContent}
-    public {field.Type} {name}
+    public {field.Type} {safeName}
     {{
         get => {field.Name};
         set => SetField(ref {field.Name}, value);
@@ -466,7 +468,7 @@ public partial {(typeContext.IsValueType ? "struct" : "class")} {typeContext.Nam
             {
                 prop = $@"
 {string.Join("\n", field.Attributes.Select(static attr => $"    [{attr}]"))}
-    public {field.Type} {name}
+    public {field.Type} {safeName}
     {{
         get => {field.Name};
         set => SetField(ref {field.Name}, value);
@@ -517,6 +519,35 @@ public partial {(typeContext.IsValueType ? "struct" : "class")} {typeContext.Nam
         return context.Namespace is null
             ? $"{context.Name}.{hash}"
             : $"{context.Namespace.Replace('.', '/')}/{context.Name}.{hash}";
+    }
+
+    private static string GetSafePropertyName(TypeContext typeContext, string name)
+    {
+        HashSet<string> reservedNames = new(StringComparer.Ordinal)
+        {
+            typeContext.Name
+        };
+
+        TypeContext? containingType = typeContext.ContainingType;
+        while (containingType is not null)
+        {
+            reservedNames.Add(containingType.Name);
+            containingType = containingType.ContainingType;
+        }
+
+        if (!reservedNames.Contains(name))
+        {
+            return name;
+        }
+
+        string candidate = $"{name}Value";
+        int suffix = 2;
+        while (reservedNames.Contains(candidate))
+        {
+            candidate = $"{name}Value{suffix++}";
+        }
+
+        return candidate;
     }
 
     private static uint QuickHash(string value)

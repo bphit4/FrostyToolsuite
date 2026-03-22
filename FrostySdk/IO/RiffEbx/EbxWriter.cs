@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,19 +16,19 @@ namespace Frosty.Sdk.IO.RiffEbx;
 
 public class EbxWriter : BaseEbxWriter
 {
-    private static readonly Dictionary<Tuple<Guid, uint>, EbxExtra> s_arrayExtraCache = new();
+    private static readonly ConcurrentDictionary<(Guid PartitionGuid, uint Offset), EbxExtra> s_arrayExtraCache = new();
 
     private readonly List<EbxExtra> m_arrays = new();
     private readonly List<EbxExtra> m_boxedValues = new();
 
     internal static void SetArrayExtra(Guid inPartitionGuid, EbxExtra inArray)
     {
-        s_arrayExtraCache[Tuple.Create(inPartitionGuid, inArray.Offset)] = inArray;
+        s_arrayExtraCache[(inPartitionGuid, inArray.Offset)] = inArray;
     }
 
     private static bool TryGetArrayExtra(Guid inPartitionGuid, uint inOffset, out EbxExtra outArray)
     {
-        return s_arrayExtraCache.TryGetValue(Tuple.Create(inPartitionGuid, inOffset), out outArray);
+        return s_arrayExtraCache.TryGetValue((inPartitionGuid, inOffset), out outArray);
     }
 
     private readonly EbxTypeResolver m_typeResolver;

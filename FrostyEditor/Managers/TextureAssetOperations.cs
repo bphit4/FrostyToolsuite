@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -33,41 +34,65 @@ public enum TextureChannelMask
 
 public sealed record TextureAssetLoadResult(EbxAssetEntry Entry, Texture Texture, ResAssetEntry ResourceEntry);
 public sealed record TextureOperationResult(bool Success, string Message);
+public sealed record TexturePreviewSurface(int Width, int Height, byte[] Pixels);
 
 public static class TextureAssetOperations
 {
+    private static readonly ConcurrentDictionary<Guid, ResAssetEntry> s_textureResourceCache = new();
+    private static readonly ConcurrentDictionary<Guid, TextureAssetLoadResult> s_textureLoadCache = new();
+
     public static bool IsTextureAsset(EbxAssetEntry entry)
     {
         return entry.Type.Equals("TextureAsset", StringComparison.OrdinalIgnoreCase) ||
                entry.Type.Equals("TextureArrayAsset", StringComparison.OrdinalIgnoreCase) ||
                entry.Type.Equals("ImageLibraryTexture", StringComparison.OrdinalIgnoreCase) ||
-               entry.Type.Equals("MovieTextureAsset", StringComparison.OrdinalIgnoreCase);
+               entry.Type.Equals("MovieTextureAsset", StringComparison.OrdinalIgnoreCase) ||
+               entry.Type.Contains("Texture", StringComparison.OrdinalIgnoreCase);
     }
 
     public static TextureAssetLoadResult Load(EbxAssetEntry entry)
     {
-        EbxPartition partition = AssetManager.GetEbxPartition(entry);
-        object rootObject = partition.PrimaryInstance;
-
-        if (!TryGetPropertyValue(rootObject, "Resource", out object? resourceValue))
+        if (s_textureLoadCache.TryGetValue(entry.Guid, out TextureAssetLoadResult? cachedLoad) &&
+            !AssetManager.IsResModified(cachedLoad.ResourceEntry.ResRid) &&
+            !AssetManager.IsChunkModified(cachedLoad.Texture.ChunkId))
         {
-            throw new InvalidOperationException($"Texture asset \"{entry.Name}\" does not expose a readable Resource property.");
+            return cachedLoad;
         }
 
-        if (!TryExtractResourceId(resourceValue, out ulong rid))
+        ResAssetEntry resourceEntry = s_textureResourceCache.GetOrAdd(entry.Guid, _ =>
         {
-            string resourceType = resourceValue?.GetType().FullName ?? "<null>";
-            throw new InvalidOperationException($"Texture asset \"{entry.Name}\" returned an unsupported Resource value of type \"{resourceType}\".");
-        }
+            EbxPartition partition = AssetManager.GetEbxPartition(entry);
+            object rootObject = partition.PrimaryInstance;
 
-        ResAssetEntry? resourceEntry = AssetManager.GetResAssetEntry(rid);
-        if (resourceEntry is null)
-        {
-            throw new InvalidOperationException($"Texture resource 0x{rid:X} could not be resolved for \"{entry.Name}\".");
-        }
+            if (!TryGetPropertyValue(rootObject, "Resource", out object? resourceValue))
+            {
+                throw new InvalidOperationException($"Texture asset \"{entry.Name}\" does not expose a readable Resource property.");
+            }
+
+            if (!TryExtractResourceId(resourceValue, out ulong rid))
+            {
+                string resourceType = resourceValue?.GetType().FullName ?? "<null>";
+                throw new InvalidOperationException($"Texture asset \"{entry.Name}\" returned an unsupported Resource value of type \"{resourceType}\".");
+            }
+
+            ResAssetEntry? resolvedResourceEntry = AssetManager.GetResAssetEntry(rid);
+            if (resolvedResourceEntry is null)
+            {
+                throw new InvalidOperationException($"Texture resource 0x{rid:X} could not be resolved for \"{entry.Name}\".");
+            }
+
+            return resolvedResourceEntry;
+        });
 
         Texture texture = AssetManager.GetResAs<Texture>(resourceEntry);
-        return new TextureAssetLoadResult(entry, texture, resourceEntry);
+        TextureAssetLoadResult load = new(entry, texture, resourceEntry);
+        if (!AssetManager.IsResModified(resourceEntry.ResRid) &&
+            !AssetManager.IsChunkModified(texture.ChunkId))
+        {
+            s_textureLoadCache[entry.Guid] = load;
+        }
+
+        return load;
     }
 
     public static bool IsModified(EbxAssetEntry entry)
@@ -77,8 +102,9 @@ public static class TextureAssetOperations
             return false;
         }
 
-        return AssetManager.IsResModified(load.ResourceEntry.ResRid) ||
-               AssetManager.IsChunkModified(load.Texture.ChunkId);
+        TextureAssetLoadResult resolvedLoad = load!;
+        return AssetManager.IsResModified(resolvedLoad.ResourceEntry.ResRid) ||
+               AssetManager.IsChunkModified(resolvedLoad.Texture.ChunkId);
     }
 
     public static TextureOperationResult Revert(EbxAssetEntry entry)
@@ -88,8 +114,10 @@ public static class TextureAssetOperations
             return new TextureOperationResult(false, $"Unable to resolve texture state for {entry.Filename}.");
         }
 
-        bool revertedRes = AssetManager.RevertRes(load.ResourceEntry.ResRid);
-        bool revertedChunk = AssetManager.RevertChunk(load.Texture.ChunkId);
+        TextureAssetLoadResult resolvedLoad = load!;
+        bool revertedRes = AssetManager.RevertRes(resolvedLoad.ResourceEntry.ResRid);
+        bool revertedChunk = AssetManager.RevertChunk(resolvedLoad.Texture.ChunkId);
+        InvalidateCachedLoad(entry.Guid);
 
         if (!revertedRes && !revertedChunk)
         {
@@ -104,19 +132,46 @@ public static class TextureAssetOperations
 
     public static Bitmap CreatePreviewBitmap(Texture texture, int mipLevel, int sliceLevel, TextureChannelMask channels, bool luminance)
     {
-        byte[] ddsData = BuildPreviewDds(texture, mipLevel, sliceLevel);
-        BlobData blob = default;
-        try
+        byte[] pngData = CreatePreviewPng(texture, mipLevel, sliceLevel, channels, luminance, forceOpaqueAlpha: false, neutralizeEyelash: false);
+        return new Bitmap(new MemoryStream(pngData, writable: false));
+    }
+
+    internal static TexturePreviewSurface CreatePreviewSurface(
+        Texture texture,
+        int mipLevel,
+        int sliceLevel,
+        TextureChannelMask channels,
+        bool luminance)
+    {
+        using Image<Rgba32> image = CreatePreviewImage(texture, mipLevel, sliceLevel, channels, luminance);
+        byte[] pixels = new byte[image.Width * image.Height * 4];
+        image.CopyPixelDataTo(pixels);
+        return new TexturePreviewSurface(image.Width, image.Height, pixels);
+    }
+
+    internal static byte[] CreatePreviewPng(
+        Texture texture,
+        int mipLevel,
+        int sliceLevel,
+        TextureChannelMask channels,
+        bool luminance,
+        bool forceOpaqueAlpha,
+        bool neutralizeEyelash)
+    {
+        using Image<Rgba32> image = CreatePreviewImage(texture, mipLevel, sliceLevel, channels, luminance);
+        if (neutralizeEyelash)
         {
-            DxTexNative.ConvertDDSToImage(ddsData, ddsData.Length, TextureImageFormat.PNG, ref blob);
-            byte[] pngData = blob.ToArray();
-            byte[] processed = ApplyChannels(pngData, channels, luminance);
-            return new Bitmap(new MemoryStream(processed));
+            ApplyNeutralEyelashTint(image);
         }
-        finally
+
+        if (forceOpaqueAlpha)
         {
-            DxTexNative.ReleaseBlob(blob);
+            ForceOpaqueAlpha(image);
         }
+
+        using MemoryStream output = new();
+        image.Save(output, new PngEncoder());
+        return output.ToArray();
     }
 
     public static async Task<TextureOperationResult> ExportWithPickerAsync(EbxAssetEntry entry)
@@ -342,6 +397,7 @@ public static class TextureAssetOperations
         newTexture.SetData(load.Texture.ChunkId, payload);
         AssetManager.ModifyChunk(load.Texture.ChunkId, payload, ((newTexture.Flags & TextureFlags.OnDemandLoaded) != 0 || newTexture.Type != TextureType.TT_2d) ? null : newTexture);
         AssetManager.ModifyRes(load.ResourceEntry.ResRid, newTexture);
+        InvalidateCachedLoad(load.Entry.Guid);
         AssetEditStateTracker.MarkDirty(load.Entry.Name);
         AssetEditStateTracker.MarkModified(load.Entry.Name);
 
@@ -643,6 +699,21 @@ public static class TextureAssetOperations
         return GetAvailableMipRange(texture).FirstMip;
     }
 
+    internal static int GetPreviewMip(Texture texture, bool lowRes)
+    {
+        (int firstMip, int mipCount) = GetAvailableMipRange(texture);
+        if (!lowRes || mipCount <= 1)
+        {
+            return firstMip;
+        }
+
+        int maxMip = firstMip + mipCount - 1;
+        // Keep the first textured pass a little lighter than final quality without
+        // dropping all the way down to a very blurry preview.
+        int offset = Math.Clamp(mipCount / 3, 1, 3);
+        return Math.Min(firstMip + offset, maxMip);
+    }
+
     internal static int GetPreviewMipCount(Texture texture)
     {
         return GetAvailableMipRange(texture).MipCount;
@@ -700,7 +771,7 @@ public static class TextureAssetOperations
     private static int GetDeclaredMipCount(Texture texture)
     {
         int declaredMipCount = Math.Max(1, (int)texture.MipCount);
-        int maxMipCount = Math.Min(declaredMipCount, texture.MipSizes?.Length ?? declaredMipCount);
+        int maxMipCount = Math.Min(declaredMipCount, texture.MipSizes.Length);
         while (maxMipCount > 1 && texture.MipSizes[maxMipCount - 1] == 0)
         {
             maxMipCount--;
@@ -797,10 +868,30 @@ public static class TextureAssetOperations
         };
     }
 
-    private static byte[] ApplyChannels(byte[] pngData, TextureChannelMask channels, bool luminance)
+    private static Image<Rgba32> CreatePreviewImage(
+        Texture texture,
+        int mipLevel,
+        int sliceLevel,
+        TextureChannelMask channels,
+        bool luminance)
     {
-        using Image<Rgba32> image = Image.Load<Rgba32>(pngData);
+        byte[] ddsData = BuildPreviewDds(texture, mipLevel, sliceLevel);
+        BlobData blob = default;
+        try
+        {
+            DxTexNative.ConvertDDSToImage(ddsData, ddsData.Length, TextureImageFormat.PNG, ref blob);
+            Image<Rgba32> image = Image.Load<Rgba32>(blob.ToArray());
+            ApplyChannels(image, channels, luminance);
+            return image;
+        }
+        finally
+        {
+            DxTexNative.ReleaseBlob(blob);
+        }
+    }
 
+    private static void ApplyChannels(Image<Rgba32> image, TextureChannelMask channels, bool luminance)
+    {
         image.ProcessPixelRows(accessor =>
         {
             for (int y = 0; y < accessor.Height; y++)
@@ -835,10 +926,43 @@ public static class TextureAssetOperations
                 }
             }
         });
+    }
 
-        using MemoryStream output = new();
-        image.Save(output, new PngEncoder());
-        return output.ToArray();
+    private static void ForceOpaqueAlpha(Image<Rgba32> image)
+    {
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    row[x].A = byte.MaxValue;
+                }
+            }
+        });
+    }
+
+    private static void ApplyNeutralEyelashTint(Image<Rgba32> image)
+    {
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    Rgba32 pixel = row[x];
+                    if (pixel.A == 0)
+                    {
+                        continue;
+                    }
+
+                    byte luminance = (byte)Math.Clamp((pixel.R * 0.299f) + (pixel.G * 0.587f) + (pixel.B * 0.114f), 0f, 255f);
+                    row[x] = new Rgba32(luminance, luminance, luminance, pixel.A);
+                }
+            }
+        });
     }
 
     private static bool TryGetPropertyValue(object instance, string propertyName, out object? value)
@@ -951,6 +1075,11 @@ public static class TextureAssetOperations
             load = null;
             return false;
         }
+    }
+
+    private static void InvalidateCachedLoad(Guid entryGuid)
+    {
+        s_textureLoadCache.TryRemove(entryGuid, out _);
     }
 }
 

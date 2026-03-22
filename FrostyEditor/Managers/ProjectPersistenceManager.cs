@@ -54,6 +54,7 @@ public static class ProjectPersistenceManager
 
         string ebxDirectory = Path.Combine(projectDirectory, "ebx");
         string textureDirectory = Path.Combine(projectDirectory, "textures");
+        string meshDirectory = Path.Combine(projectDirectory, "meshes");
         if (Directory.Exists(ebxDirectory))
         {
             Directory.Delete(ebxDirectory, true);
@@ -64,8 +65,14 @@ public static class ProjectPersistenceManager
             Directory.Delete(textureDirectory, true);
         }
 
+        if (Directory.Exists(meshDirectory))
+        {
+            Directory.Delete(meshDirectory, true);
+        }
+
         Directory.CreateDirectory(ebxDirectory);
         Directory.CreateDirectory(textureDirectory);
+        Directory.CreateDirectory(meshDirectory);
 
         EditorProjectFile project = new()
         {
@@ -76,6 +83,7 @@ public static class ProjectPersistenceManager
 
         int ebxIndex = 0;
         int textureIndex = 0;
+        int meshIndex = 0;
         foreach (string assetName in AssetEditStateTracker.EnumerateModifiedAssets().Distinct(StringComparer.OrdinalIgnoreCase))
         {
             EbxAssetEntry? entry = AssetManager.GetEbxAssetEntry(assetName);
@@ -98,43 +106,55 @@ public static class ProjectPersistenceManager
                 ebxIndex++;
             }
 
-            if (!TextureAssetOperations.IsTextureAsset(entry) || !TextureAssetOperations.IsModified(entry))
+            if (TextureAssetOperations.IsTextureAsset(entry) && TextureAssetOperations.IsModified(entry))
             {
-                continue;
+                TextureAssetLoadResult load = TextureAssetOperations.Load(entry);
+                ChunkAssetEntry? chunkEntry = AssetManager.GetChunkAssetEntry(load.Texture.ChunkId);
+                if (chunkEntry is not null)
+                {
+                    string assetFolder = Path.Combine(textureDirectory, $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}");
+                    Directory.CreateDirectory(assetFolder);
+
+                    string resRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "resource.bin");
+                    string metaRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "resource.meta");
+                    string chunkRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "chunk.bin");
+
+                    using (Block<byte> resData = AssetManager.GetAsset(load.ResourceEntry))
+                    using (Block<byte> chunkData = AssetManager.GetAsset(chunkEntry))
+                    {
+                        File.WriteAllBytes(Path.Combine(projectDirectory, resRelativePath), resData.ToArray());
+                        File.WriteAllBytes(Path.Combine(projectDirectory, metaRelativePath), AssetManager.GetResMeta(load.ResourceEntry));
+                        File.WriteAllBytes(Path.Combine(projectDirectory, chunkRelativePath), chunkData.ToArray());
+                    }
+
+                    project.Textures.Add(new TextureProjectAsset
+                    {
+                        Name = entry.Name,
+                        ResRid = load.ResourceEntry.ResRid,
+                        ChunkId = load.Texture.ChunkId,
+                        ResourceFile = resRelativePath,
+                        ResourceMetaFile = metaRelativePath,
+                        ChunkFile = chunkRelativePath
+                    });
+                    textureIndex++;
+                }
             }
 
-            TextureAssetLoadResult load = TextureAssetOperations.Load(entry);
-            ChunkAssetEntry? chunkEntry = AssetManager.GetChunkAssetEntry(load.Texture.ChunkId);
-            if (chunkEntry is null)
+            if (MeshAssetOperations.IsMeshAsset(entry) && MeshAssetOperations.IsModified(entry))
             {
-                continue;
+                string meshRelativePath = Path.Combine("meshes", $"{meshIndex:D4}_{MakeSafeFileStem(entry.Name)}.zip");
+                MeshOperationResult meshExport = MeshAssetOperations.ExportPackage(MeshAssetOperations.Load(entry),
+                    Path.Combine(projectDirectory, meshRelativePath));
+                if (meshExport.Success)
+                {
+                    project.Meshes.Add(new MeshProjectAsset
+                    {
+                        Name = entry.Name,
+                        File = meshRelativePath
+                    });
+                    meshIndex++;
+                }
             }
-
-            string assetFolder = Path.Combine(textureDirectory, $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}");
-            Directory.CreateDirectory(assetFolder);
-
-            string resRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "resource.bin");
-            string metaRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "resource.meta");
-            string chunkRelativePath = Path.Combine("textures", $"{textureIndex:D4}_{MakeSafeFileStem(entry.Name)}", "chunk.bin");
-
-            using (Block<byte> resData = AssetManager.GetAsset(load.ResourceEntry))
-            using (Block<byte> chunkData = AssetManager.GetAsset(chunkEntry))
-            {
-                File.WriteAllBytes(Path.Combine(projectDirectory, resRelativePath), resData.ToArray());
-                File.WriteAllBytes(Path.Combine(projectDirectory, metaRelativePath), AssetManager.GetResMeta(load.ResourceEntry));
-                File.WriteAllBytes(Path.Combine(projectDirectory, chunkRelativePath), chunkData.ToArray());
-            }
-
-            project.Textures.Add(new TextureProjectAsset
-            {
-                Name = entry.Name,
-                ResRid = load.ResourceEntry.ResRid,
-                ChunkId = load.Texture.ChunkId,
-                ResourceFile = resRelativePath,
-                ResourceMetaFile = metaRelativePath,
-                ChunkFile = chunkRelativePath
-            });
-            textureIndex++;
         }
 
         string projectPath = Path.Combine(projectDirectory, ProjectFileName);
@@ -147,7 +167,7 @@ public static class ProjectPersistenceManager
         InspectorEditStateTracker.ClearAllDirty();
 
         return new ProjectOperationResult(true,
-            $"Saved project '{project.Name}' with {project.Ebx.Count} EBX edit(s) and {project.Textures.Count} texture edit(s).",
+            $"Saved project '{project.Name}' with {project.Ebx.Count} EBX edit(s), {project.Textures.Count} texture edit(s), and {project.Meshes.Count} mesh edit(s).",
             projectDirectory);
     }
 
@@ -178,6 +198,7 @@ public static class ProjectPersistenceManager
 
         int loadedEbx = 0;
         int loadedTextures = 0;
+        int loadedMeshes = 0;
 
         foreach (EbxProjectAsset ebxAsset in project.Ebx)
         {
@@ -212,12 +233,30 @@ public static class ProjectPersistenceManager
             loadedTextures++;
         }
 
+        foreach (MeshProjectAsset meshAsset in project.Meshes)
+        {
+            EbxAssetEntry? entry = AssetManager.GetEbxAssetEntry(meshAsset.Name);
+            string packagePath = Path.Combine(projectDirectory, meshAsset.File);
+            if (entry is null || !File.Exists(packagePath))
+            {
+                continue;
+            }
+
+            MeshOperationResult result = MeshAssetOperations.ImportPackage(entry, packagePath);
+            if (!result.Success)
+            {
+                continue;
+            }
+
+            loadedMeshes++;
+        }
+
         string profileWarning = string.Equals(project.Profile, ProfilesLibrary.ProfileName, StringComparison.OrdinalIgnoreCase)
             ? string.Empty
             : $" Project was saved for profile '{project.Profile}' but '{ProfilesLibrary.ProfileName}' is currently loaded.";
 
         return new ProjectOperationResult(true,
-            $"Loaded project '{project.Name}' with {loadedEbx} EBX edit(s) and {loadedTextures} texture edit(s).{profileWarning}",
+            $"Loaded project '{project.Name}' with {loadedEbx} EBX edit(s), {loadedTextures} texture edit(s), and {loadedMeshes} mesh edit(s).{profileWarning}",
             projectDirectory);
     }
 
@@ -248,20 +287,34 @@ public static class ProjectPersistenceManager
                     AddEbxResource(entry, resources, dataBlocks);
                 }
 
-                if (!TextureAssetOperations.IsTextureAsset(entry) || !TextureAssetOperations.IsModified(entry))
+                if (TextureAssetOperations.IsTextureAsset(entry) && TextureAssetOperations.IsModified(entry))
                 {
-                    continue;
-                }
+                    TextureAssetLoadResult load = TextureAssetOperations.Load(entry);
+                    if (exportedChunks.Add(load.Texture.ChunkId) && AssetManager.GetChunkAssetEntry(load.Texture.ChunkId) is ChunkAssetEntry chunkEntry)
+                    {
+                        AddChunkResource(load, chunkEntry, resources, dataBlocks);
+                    }
 
-                TextureAssetLoadResult load = TextureAssetOperations.Load(entry);
-                if (exportedChunks.Add(load.Texture.ChunkId) && AssetManager.GetChunkAssetEntry(load.Texture.ChunkId) is ChunkAssetEntry chunkEntry)
-                {
-                    AddChunkResource(load, chunkEntry, resources, dataBlocks);
+                    if (exportedRes.Add(load.ResourceEntry.ResRid))
+                    {
+                        AddResResource(load, resources, dataBlocks);
+                    }
                 }
-
-                if (exportedRes.Add(load.ResourceEntry.ResRid))
+                else if (MeshAssetOperations.IsMeshAsset(entry) && MeshAssetOperations.IsModified(entry))
                 {
-                    AddResResource(load, resources, dataBlocks);
+                    MeshAssetLoadResult meshLoad = MeshAssetOperations.Load(entry);
+                    foreach (Guid chunkId in meshLoad.Mesh.EnumerateExternalChunkIds().Distinct())
+                    {
+                        if (exportedChunks.Add(chunkId) && AssetManager.GetChunkAssetEntry(chunkId) is ChunkAssetEntry chunkEntry)
+                        {
+                            AddGenericChunkResource(chunkEntry, resources, dataBlocks);
+                        }
+                    }
+
+                    if (exportedRes.Add(meshLoad.ResourceEntry.ResRid))
+                    {
+                        AddGenericResResource(meshLoad.ResourceEntry, resources, dataBlocks);
+                    }
                 }
             }
 
@@ -366,6 +419,52 @@ public static class ProjectPersistenceManager
             []));
     }
 
+    private static void AddGenericResResource(ResAssetEntry entry, ICollection<BaseModResource> resources, ICollection<Block<byte>> dataBlocks)
+    {
+        byte[] meta = AssetManager.GetResMeta(entry);
+        using Block<byte> rawData = AssetManager.GetAsset(entry);
+        Block<byte> compressedData = Cas.CompressData(rawData, ModExportUtilities.GetResCompression(), 0);
+        dataBlocks.Add(compressedData);
+        resources.Add(new ResModResource(
+            dataBlocks.Count - 1,
+            entry.Name.ToLowerInvariant(),
+            Frosty.Sdk.Utils.Utils.GenerateSha1(compressedData),
+            rawData.Size,
+            0,
+            0,
+            string.Empty,
+            [],
+            [],
+            (uint)entry.ResType,
+            entry.ResRid,
+            meta));
+    }
+
+    private static void AddGenericChunkResource(ChunkAssetEntry entry, ICollection<BaseModResource> resources, ICollection<Block<byte>> dataBlocks)
+    {
+        using Block<byte> rawData = AssetManager.GetAsset(entry);
+        Block<byte> compressedData = Cas.CompressData(rawData, ModExportUtilities.GetChunkCompression(), 0);
+        dataBlocks.Add(compressedData);
+        resources.Add(new ChunkModResource(
+            dataBlocks.Count - 1,
+            entry.Id.ToString(),
+            Frosty.Sdk.Utils.Utils.GenerateSha1(compressedData),
+            rawData.Size,
+            0,
+            0,
+            string.Empty,
+            [],
+            [],
+            0,
+            0,
+            entry.LogicalOffset,
+            entry.LogicalSize,
+            0,
+            -1,
+            [],
+            []));
+    }
+
     private static FrostyModDetails CreateDefaultModDetails(string title)
     {
         return new FrostyModDetails(
@@ -392,6 +491,7 @@ public static class ProjectPersistenceManager
         public FrostyModDetails Details { get; set; } = new();
         public List<EbxProjectAsset> Ebx { get; set; } = [];
         public List<TextureProjectAsset> Textures { get; set; } = [];
+        public List<MeshProjectAsset> Meshes { get; set; } = [];
     }
 
     private sealed class EbxProjectAsset
@@ -408,6 +508,12 @@ public static class ProjectPersistenceManager
         public string ResourceFile { get; set; } = string.Empty;
         public string ResourceMetaFile { get; set; } = string.Empty;
         public string ChunkFile { get; set; } = string.Empty;
+    }
+
+    private sealed class MeshProjectAsset
+    {
+        public string Name { get; set; } = string.Empty;
+        public string File { get; set; } = string.Empty;
     }
 }
 

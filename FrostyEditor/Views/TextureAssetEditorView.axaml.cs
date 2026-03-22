@@ -304,7 +304,7 @@ public partial class TextureAssetEditorView : UserControl
 
         Point current = e.GetPosition(this);
         double maxWidth = Math.Max(140, Bounds.Width - 80);
-        vm.SetManualInspectorNameColumnWidth(Math.Clamp(m_inspectorColumnStartWidth + (current.X - m_inspectorGripStart.X), 80, maxWidth));
+        vm.SetManualInspectorNameColumnWidth(Math.Clamp(m_inspectorColumnStartWidth + (current.X - m_inspectorGripStart.X), 110, maxWidth));
         e.Handled = true;
     }
 
@@ -323,6 +323,89 @@ public partial class TextureAssetEditorView : UserControl
     // Inspector name column — expand / collapse only.
     // No editing is triggered from here.
     // ─────────────────────────────────────────────────────────────
+
+    private void OnInspectorRowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (IsEmbeddedControlInteraction(e.Source))
+        {
+            return;
+        }
+
+        if (sender is not Control row || row.DataContext is not InspectorNodeModel node)
+        {
+            return;
+        }
+
+        if (node.HasChildren)
+        {
+            bool expandAllLevels = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            bool expandOneLevel = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+            if (expandAllLevels)
+            {
+                node.ExpandAllDescendants();
+            }
+            else if (expandOneLevel)
+            {
+                node.ExpandOneLevelProgressive();
+            }
+            else
+            {
+                bool shouldExpand = !node.IsExpanded;
+                if (shouldExpand)
+                {
+                    node.EnsureChildrenLoaded();
+                }
+
+                node.IsExpanded = shouldExpand;
+            }
+
+            RefreshInspectorRows(node);
+            e.Handled = true;
+            return;
+        }
+
+        if (node.IsBoolean)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (!node.BeginEdit())
+        {
+            return;
+        }
+
+        TextBox? editor = row.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+        if (editor is null)
+        {
+            return;
+        }
+
+        editor.Focus();
+        editor.SelectAll();
+        e.Handled = true;
+    }
+
+    private void OnInspectorTreeExpanded(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is TreeViewItem { DataContext: InspectorNodeModel node })
+        {
+            node.IsExpanded = true;
+        }
+    }
+
+    private void OnInspectorTreeCollapsed(object? sender, RoutedEventArgs e)
+    {
+        if (e.Source is TreeViewItem { DataContext: InspectorNodeModel node })
+        {
+            node.IsExpanded = false;
+        }
+    }
 
     private void OnInspectorNamePointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -347,12 +430,10 @@ public partial class TextureAssetEditorView : UserControl
         if (expandAllLevels)
         {
             node.ExpandAllDescendants();
-            RefreshInspectorRows();
         }
         else if (expandOneLevel)
         {
             node.ExpandOneLevelProgressive();
-            RefreshInspectorRows();
         }
         else
         {
@@ -363,9 +444,9 @@ public partial class TextureAssetEditorView : UserControl
             }
 
             node.IsExpanded = shouldExpand;
-            RefreshInspectorRows();
         }
 
+        RefreshInspectorRows(node);
         e.Handled = true;
     }
 
@@ -401,7 +482,7 @@ public partial class TextureAssetEditorView : UserControl
             }
 
             node.IsExpanded = shouldExpand;
-            RefreshInspectorRows();
+            RefreshInspectorRows(node);
             e.Handled = true;
             return;
         }
@@ -794,13 +875,52 @@ public partial class TextureAssetEditorView : UserControl
         App.MainViewModel?.DataExplorer.RevealAsset(entry, openAsset);
     }
 
-    private void RefreshInspectorRows()
+    private void RefreshInspectorRows(InspectorNodeModel? node = null)
     {
         if (DataContext is not TextureAssetEditorViewModel viewModel)
         {
             return;
         }
 
-        viewModel.RefreshVisibleNodes();
+        PreserveInspectorViewport(() =>
+        {
+            if (node is not null)
+            {
+                viewModel.RefreshNodeSubtree(node);
+                return;
+            }
+
+            viewModel.RefreshVisibleNodes();
+        });
+    }
+
+    private void PreserveInspectorViewport(Action refreshAction)
+    {
+        ListBox? inspectorList = this.FindControl<ListBox>("InspectorList");
+        ScrollViewer? scrollViewer = inspectorList?
+            .GetVisualDescendants()
+            .OfType<ScrollViewer>()
+            .FirstOrDefault();
+
+        if (scrollViewer is null)
+        {
+            refreshAction();
+            return;
+        }
+
+        Vector offset = scrollViewer.Offset;
+        refreshAction();
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            ScrollViewer? refreshedScrollViewer = inspectorList?
+                .GetVisualDescendants()
+                .OfType<ScrollViewer>()
+                .FirstOrDefault();
+            if (refreshedScrollViewer is not null)
+            {
+                refreshedScrollViewer.Offset = offset;
+            }
+        }, DispatcherPriority.Background);
     }
 }

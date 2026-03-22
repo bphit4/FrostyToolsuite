@@ -62,7 +62,7 @@ public sealed class Texture : Resource
                 return "Unknown";
             }
 
-            string name = Enum.Parse(type.Type, m_pixelFormat.ToString()).ToString();
+            string name = Enum.GetName(type.Type, m_pixelFormat) ?? m_pixelFormat.ToString();
             return name.Replace(enumType + "_", "", StringComparison.Ordinal);
         }
     }
