@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Frosty.Sdk.Managers.Entries;
 
 namespace FrostyEditor.ViewModels;
@@ -10,6 +11,16 @@ public interface IReloadableDocument
 public interface ISessionStateAwareDocument
 {
     void RefreshSessionState();
+}
+
+public interface ISaveableDocument
+{
+    bool HasUnsavedChanges { get; }
+    bool CanSaveDocument { get; }
+    bool CanExportDocument { get; }
+    string DirtyStateText { get; }
+    Task<bool> SaveDocumentAsync();
+    Task<bool> ExportDocumentAsync();
 }
 
 public class AssetEditorViewModel : ViewModelBase, IReloadableDocument

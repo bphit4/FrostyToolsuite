@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Frosty.Sdk.Managers.Entries;
 
 namespace FrostyEditor.Managers;
 
@@ -10,6 +11,7 @@ public static class AssetIconRegistry
 {
     private const string AssetBasePath = "avares://FrostyEditor/Assets/AssetTypes/";
     private static readonly Dictionary<string, Bitmap> s_legacyBitmapCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, string> s_soundEntryIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, string> s_exactTypeMappings = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -92,10 +94,49 @@ public static class AssetIconRegistry
     };
 
     private static readonly Dictionary<string, Bitmap> s_bitmapCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> s_knownSoundDataTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AudioPatchInterfaceAsset",
+        "BoxOfficeEventSystemDescription",
+        "ContextDataFile",
+        "ContextSystem",
+        "FootballAudioDoNotPlayListCollection",
+        "FootballAudioEATraxMetaDataCollection",
+        "FootballAudioFmvVolumeMappingCollection",
+        "FootballAudioUISoundStyleCollection",
+        "MixerAsset",
+        "MixerSystemAsset",
+        "MusicAsset",
+        "MusicGraphAsset",
+        "MusicInterfaceAsset",
+        "MusicPlaylistAsset",
+        "SchematicChannelAsset",
+        "SentenceDatabase",
+        "SentenceKeywords",
+        "SentencePlayerWaveCollection",
+        "SentenceSampleMetadata",
+        "SentenceSampleProbability",
+        "SoundPatchAsset",
+        "SoundPatchConfigurationAsset",
+        "SoundSubPatchAsset",
+        "UIAudioContext",
+        "UIAudioInterface",
+    };
 
     public static Bitmap GetIcon(string? assetType)
     {
         string fileName = ResolveIconFileName(assetType);
+        return GetBitmap(fileName);
+    }
+
+    public static Bitmap GetIcon(AssetEntry? entry)
+    {
+        string fileName = ResolveIconFileName(entry);
+        return GetBitmap(fileName);
+    }
+
+    private static Bitmap GetBitmap(string fileName)
+    {
         if (s_bitmapCache.TryGetValue(fileName, out Bitmap? cached))
         {
             return cached;
@@ -107,6 +148,48 @@ public static class AssetIconRegistry
                         throw new FileNotFoundException("Could not load fallback asset icon.");
         s_bitmapCache[fileName] = bitmap;
         return bitmap;
+    }
+
+    private static string ResolveIconFileName(AssetEntry? entry)
+    {
+        if (entry is not EbxAssetEntry ebxEntry ||
+            string.IsNullOrWhiteSpace(ebxEntry.Name) ||
+            !ebxEntry.Name.StartsWith("sound/", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveIconFileName(entry?.Type);
+        }
+
+        if (s_knownSoundDataTypes.Contains(ebxEntry.Type))
+        {
+            return "Dat.png";
+        }
+
+        if (string.Equals(ebxEntry.Type, "SoundAsset", StringComparison.OrdinalIgnoreCase))
+        {
+            if (s_soundEntryIconCache.TryGetValue(ebxEntry.Name, out string? cachedIcon))
+            {
+                return cachedIcon;
+            }
+
+            string resolvedIcon;
+            try
+            {
+                resolvedIcon = SoundAssetOperations.IsSoundAsset(ebxEntry)
+                    ? "SoundFileType.png"
+                    : "Dat.png";
+            }
+            catch
+            {
+                resolvedIcon = ebxEntry.Name.EndsWith("_nar", StringComparison.OrdinalIgnoreCase)
+                    ? "Dat.png"
+                    : "SoundFileType.png";
+            }
+
+            s_soundEntryIconCache[ebxEntry.Name] = resolvedIcon;
+            return resolvedIcon;
+        }
+
+        return ResolveIconFileName(entry.Type);
     }
 
     private static string ResolveIconFileName(string? assetType)

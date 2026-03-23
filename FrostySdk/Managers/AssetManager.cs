@@ -52,6 +52,7 @@ public static class AssetManager
     private static readonly Dictionary<Guid, byte[]> s_modifiedChunkData = new();
     private static readonly Dictionary<ulong, long> s_originalResSizes = new();
     private static readonly Dictionary<Guid, ChunkRestoreState> s_originalChunkStates = new();
+    private static readonly HashSet<Guid> s_addedChunkIds = new();
 
     /// <summary>
     /// Cache Versions:
@@ -85,6 +86,7 @@ public static class AssetManager
         s_modifiedChunkData.Clear();
         s_originalResSizes.Clear();
         s_originalChunkStates.Clear();
+        s_addedChunkIds.Clear();
     }
 
     public static bool Initialize(PatchResult? patchResult = null)
@@ -470,6 +472,24 @@ public static class AssetManager
         return true;
     }
 
+    public static ChunkAssetEntry AddChunk(byte[] buffer, Guid? chunkId = null)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+
+        Guid id = chunkId ?? Guid.NewGuid();
+        if (s_chunkGuidMapping.TryGetValue(id, out ChunkAssetEntry? existing))
+        {
+            ModifyChunk(id, buffer);
+            return existing;
+        }
+
+        ChunkAssetEntry entry = new(id, Frosty.Sdk.Utils.Utils.GenerateSha1(buffer), 0, (uint)buffer.Length);
+        s_chunkGuidMapping.Add(id, entry);
+        s_modifiedChunkData[id] = (byte[])buffer.Clone();
+        s_addedChunkIds.Add(id);
+        return entry;
+    }
+
     public static bool ModifyChunk(Guid chunkId, byte[] buffer, Texture? texture)
     {
         if (!ModifyChunk(chunkId, buffer))
@@ -548,6 +568,14 @@ public static class AssetManager
 
     public static bool RevertChunk(Guid chunkId)
     {
+        if (s_addedChunkIds.Remove(chunkId))
+        {
+            bool removed = s_chunkGuidMapping.Remove(chunkId);
+            removed |= s_modifiedChunkData.Remove(chunkId);
+            s_originalChunkStates.Remove(chunkId);
+            return removed;
+        }
+
         if (!s_chunkGuidMapping.TryGetValue(chunkId, out ChunkAssetEntry? entry))
         {
             return false;
@@ -601,6 +629,12 @@ public static class AssetManager
         s_modifiedChunkData.Clear();
         s_originalResSizes.Clear();
         s_originalChunkStates.Clear();
+        foreach (Guid chunkId in s_addedChunkIds)
+        {
+            s_chunkGuidMapping.Remove(chunkId);
+        }
+
+        s_addedChunkIds.Clear();
     }
 
     public static Block<byte> GetRawAsset(AssetEntry entry)

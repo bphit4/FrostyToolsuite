@@ -15,6 +15,7 @@ public partial class MainWindow : Window
 {
     private bool m_applyingSettings;
     private bool m_shellAttached;
+    private bool m_allowClose;
 
     public MainWindow()
     {
@@ -54,10 +55,24 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(AttachShellContent, DispatcherPriority.Background);
     }
 
-    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (m_applyingSettings)
         {
+            return;
+        }
+
+        if (!m_allowClose && Content is MainView { DataContext: MainViewModel viewModel })
+        {
+            e.Cancel = true;
+            bool canClose = await viewModel.ConfirmCloseAllDocumentsAsync();
+            if (!canClose)
+            {
+                return;
+            }
+
+            m_allowClose = true;
+            Close();
             return;
         }
 

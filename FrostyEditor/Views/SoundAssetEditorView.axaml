@@ -1,0 +1,259 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:FrostyEditor.ViewModels"
+             xmlns:models="clr-namespace:FrostyEditor.Models"
+             mc:Ignorable="d"
+             x:Class="FrostyEditor.Views.SoundAssetEditorView"
+             x:Name="Root"
+             x:DataType="viewModels:SoundAssetEditorViewModel"
+             x:CompileBindings="False"
+             d:DesignWidth="1280"
+             d:DesignHeight="760">
+  <UserControl.Resources>
+    <DataTemplate x:Key="SegmentRowTemplate" DataType="models:SoundSegmentItemModel">
+      <Border Padding="0" Margin="0" Background="#222228" BorderBrush="#34343B" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="42,108,128,94,54,52,76,152,72,72" MinHeight="18">
+          <Border Grid.Column="0" Padding="6,0,0,0" Background="Transparent">
+            <CheckBox HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                      IsChecked="{Binding IsSelected}"/>
+          </Border>
+          <TextBlock Grid.Column="1"
+                     Margin="2,0"
+                     VerticalAlignment="Center"
+                     Text="{Binding SegmentDisplayText}"/>
+          <TextBlock Grid.Column="2"
+                     Margin="2,0"
+                     VerticalAlignment="Center"
+                     Text="{Binding VariationDisplayText}"/>
+          <TextBlock Grid.Column="3"
+                     Margin="2,0"
+                     VerticalAlignment="Center"
+                     Text="{Binding DurationText}"/>
+          <Button Grid.Column="4"
+                    Classes="toolbar"
+                    MinWidth="50"
+                    Padding="5,0"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Content="{Binding PlayButtonText}"
+                    Click="OnPlaySegmentClick"/>
+            <Button Grid.Column="5"
+                    Classes="toolbar"
+                    MinWidth="44"
+                    Padding="5,0"
+                    Margin="1,0"
+                    VerticalAlignment="Center"
+                    Content="{Binding StopButtonText}"
+                    Click="OnStopSegmentClick"
+                    IsEnabled="{Binding IsCurrent}"/>
+            <Slider Grid.Column="6"
+                    Classes="sound-progress"
+                    Width="66"
+                    Margin="1,0"
+                    Minimum="0"
+                    Maximum="{Binding ProgressMaximum}"
+                    Value="{Binding ProgressValue}"
+                    VerticalAlignment="Center"
+                    PointerReleased="OnSegmentSeekPointerReleased"/>
+            <TextBlock Grid.Column="7"
+                       VerticalAlignment="Center"
+                       Margin="2,0">
+              <Run Text="{Binding ElapsedText}"/>
+              <Run Text=" / "/>
+              <Run Text="{Binding TotalText}"/>
+            </TextBlock>
+            <Button Grid.Column="8"
+                    Classes="toolbar"
+                    Padding="5,0"
+                    Margin="1,0"
+                    VerticalAlignment="Center"
+                    Content="Export"
+                    Click="OnExportSegmentClick"/>
+            <Button Grid.Column="9"
+                    Classes="toolbar"
+                    Padding="5,0"
+                    Margin="1,0"
+                    VerticalAlignment="Center"
+                    Content="Import"
+                    Click="OnImportSegmentClick"/>
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="DataSetCompactTemplate" DataType="models:SoundDatasetSheetModel">
+      <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+    </DataTemplate>
+
+    <DataTemplate x:Key="DataSetColumnTemplate" DataType="models:SoundDatasetColumnModel">
+      <Border Width="{Binding Width}" Padding="3,0" Margin="0" Background="#1E1E23" BorderBrush="#34343B" BorderThickness="0,0,1,1">
+        <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="DataSetCellTemplate" DataType="models:SoundDatasetCellModel">
+      <Border Width="{Binding Width}" Padding="1,0" Margin="0" Background="#222228" BorderBrush="#34343B" BorderThickness="0,0,1,1">
+        <Grid>
+          <CheckBox IsVisible="{Binding IsBoolean}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsEnabled="{Binding IsEditable}"
+                    IsChecked="{Binding BooleanValue}"/>
+          <TextBox IsVisible="{Binding UsesTextEditor}"
+                   Classes="search-box"
+                   IsEnabled="{Binding IsEditable}"
+                   Text="{Binding EditorValue}"
+                   BorderThickness="0"
+                   Background="Transparent"
+                   Padding="0"
+                   Height="28"
+                   VerticalContentAlignment="Center"/>
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="DataSetRowTemplate" DataType="models:SoundDatasetRowModel">
+      <Border Padding="0" Margin="0" Background="#222228" BorderBrush="#34343B" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="40,*" MinHeight="20">
+          <TextBlock Grid.Column="0"
+                     Margin="6,0,0,0"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Center"
+                     Text="{Binding DisplayIndex}"/>
+          <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}" ItemTemplate="{StaticResource DataSetCellTemplate}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal"/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </Grid>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="ListBox.sound-list">
+      <Setter Property="Background" Value="#1E1E23"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.sound-list > ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="ListBox.sound-list ScrollViewer">
+      <Setter Property="AllowAutoHide" Value="False"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+      <Setter Property="IsScrollInertiaEnabled" Value="False"/>
+    </Style>
+    <Style Selector="Slider.sound-progress">
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="MinHeight" Value="14"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Slider.sound-progress /template/ Thumb">
+      <Setter Property="Width" Value="9"/>
+      <Setter Property="Height" Value="9"/>
+      <Setter Property="MinWidth" Value="9"/>
+      <Setter Property="MinHeight" Value="9"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+    <Border Classes="panel" Padding="1" Margin="0,0,0,2">
+      <Grid ColumnDefinitions="*">
+        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsVariationsMode}">
+          <Button Classes="toolbar" Content="Export All" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}"/>
+          <Button Classes="toolbar" Content="Import All" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}"/>
+          <Button Classes="toolbar" Content="Add New Sound" Command="{Binding AddCommand}" IsEnabled="{Binding CanAddItem}"/>
+          <Button Classes="toolbar" Content="Switch to Data Set mode" Command="{Binding ToggleModeCommand}" IsEnabled="{Binding CanToggleMode}"/>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsDataSetsMode}">
+          <Button Classes="toolbar" Content="Export All" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}"/>
+          <Button Classes="toolbar" Content="Import All" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}"/>
+          <Button Classes="toolbar" Content="Add New Sound" Command="{Binding AddCommand}" IsEnabled="{Binding CanAddItem}"/>
+          <Button Classes="toolbar" Content="Switch to Variations mode" Command="{Binding ToggleModeCommand}" IsEnabled="{Binding CanToggleMode}"/>
+          <Button Classes="toolbar" Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSaveAsset}"/>
+          <Button Classes="toolbar" Content="Export Data Set" Command="{Binding ExportDataSetCommand}" IsEnabled="{Binding CanExportDataSet}"/>
+          <Button Classes="toolbar" Content="Import Data Set" Command="{Binding ImportDataSetCommand}" IsEnabled="{Binding CanImportDataSet}"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1">
+      <Grid IsVisible="{Binding IsVariationsMode}" RowDefinitions="Auto,*">
+        <Border Background="#1E1E23" BorderBrush="#34343B" BorderThickness="0,0,0,1" Padding="0">
+          <Grid ColumnDefinitions="42,108,128,94,54,52,76,152,72,72" Height="18">
+            <Border Grid.Column="0" Padding="6,0,0,0" Background="Transparent">
+              <CheckBox HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        IsThreeState="True"
+                        IsChecked="{Binding AllSegmentsSelected}"/>
+            </Border>
+            <TextBlock Grid.Column="1" Margin="2,0" FontWeight="SemiBold" Text="Segment" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="2" Margin="2,0" FontWeight="SemiBold" Text="Variation" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="3" Margin="2,0" FontWeight="SemiBold" Text="Duration" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="4" Margin="2,0" FontWeight="SemiBold" Text="Play" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="5" Margin="2,0" FontWeight="SemiBold" Text="Stop" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="6" Margin="2,0" FontWeight="SemiBold" Text="" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="7" Margin="2,0" FontWeight="SemiBold" Text="Time" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="8" Margin="2,0" FontWeight="SemiBold" Text="Export" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="9" Margin="2,0" FontWeight="SemiBold" Text="Import" VerticalAlignment="Center"/>
+          </Grid>
+        </Border>
+        <ListBox Grid.Row="1"
+                 ItemsSource="{Binding SegmentRows}"
+                 SelectedItem="{Binding SelectedSegment}"
+                 ItemTemplate="{StaticResource SegmentRowTemplate}"
+                 Classes="sound-list">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel/>
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+        </ListBox>
+      </Grid>
+
+      <Grid IsVisible="{Binding IsDataSetsMode}" RowDefinitions="Auto,Auto,*">
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,2">
+          <TextBlock VerticalAlignment="Center" Text="Current Data Set:"/>
+          <ComboBox Width="220"
+                    ItemsSource="{Binding DataSets}"
+                    SelectedItem="{Binding SelectedDataSet}"
+                    ItemTemplate="{StaticResource DataSetCompactTemplate}"/>
+        </StackPanel>
+        <Border Grid.Row="1" Background="#1E1E23" BorderBrush="#34343B" BorderThickness="0,0,0,1" Padding="0">
+          <Grid ColumnDefinitions="40,*" MinHeight="20">
+            <Border Grid.Column="0" Background="#1E1E23" BorderBrush="#34343B" BorderThickness="0,0,1,1"/>
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding SelectedDataSet.Columns}" ItemTemplate="{StaticResource DataSetColumnTemplate}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </Grid>
+        </Border>
+        <ListBox Grid.Row="2"
+                 ItemsSource="{Binding SelectedDataSet.Rows}"
+                 SelectedItem="{Binding SelectedDataSetRow}"
+                 ItemTemplate="{StaticResource DataSetRowTemplate}"
+                 Classes="sound-list">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel/>
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+        </ListBox>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

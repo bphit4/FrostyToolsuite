@@ -291,6 +291,13 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
+        if (SoundAssetEditorViewModel.IsSoundAsset(entry))
+        {
+            SoundOperationResult result = await SoundAssetEditorViewModel.ExportWithPickerAsync(entry);
+            LogSoundOperationResult(result);
+            return;
+        }
+
         IStorageFile? file = await FileService.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save ebx as",
@@ -330,20 +337,31 @@ public partial class DataExplorerViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void OpenAsset()
+    private async Task OpenAsset()
     {
         if (m_selectedAsset?.Entry is not EbxAssetEntry entry)
         {
             return;
         }
 
+        AssetEditorViewModel desiredEditor = PluginManager.GetEbxAssetEditor(entry);
         string documentKey = AssetEditorViewModel.CreateDocumentKey(entry);
-        if (App.MainViewModel?.ActivateDocumentByKey(documentKey) == true)
+        DocumentModel? existing = App.MainViewModel?.GetDocumentByKey(documentKey);
+        if (existing is not null)
         {
-            return;
+            if (existing.Content?.GetType() == desiredEditor.GetType())
+            {
+                App.MainViewModel?.ActivateDocumentByKey(documentKey);
+                return;
+            }
+
+            if (!await App.MainViewModel!.CloseDocumentAsync(existing))
+            {
+                return;
+            }
         }
 
-        App.MainViewModel?.AddEditor(PluginManager.GetEbxAssetEditor(entry));
+        App.MainViewModel?.AddEditor(desiredEditor);
     }
 
     [RelayCommand]
@@ -381,7 +399,21 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
-        const string message = "Import is only wired for texture assets right now. Other asset writeback editors still need to be ported.";
+        if (SoundAssetEditorViewModel.IsSoundAsset(entry))
+        {
+            SoundOperationResult result = await SoundAssetEditorViewModel.ImportWithPickerAsync(entry);
+            LogSoundOperationResult(result);
+            if (result.Success)
+            {
+                App.MainViewModel?.RefreshDocumentByKey(AssetEditorViewModel.CreateDocumentKey(entry));
+                UpdateAssetContextMenuVisibility();
+                RefreshAssetList();
+            }
+
+            return;
+        }
+
+        const string message = "Import is only wired for texture, mesh, and supported sound assets right now. Other asset writeback editors still need to be ported.";
         FrostyLogger.Logger?.LogWarning(message);
     }
 
@@ -412,6 +444,10 @@ public partial class DataExplorerViewModel : ViewModelBase
                 return Task.CompletedTask;
             }
         }
+        else if (SoundAssetEditorViewModel.IsSoundAsset(entry))
+        {
+            return RevertSoundAssetAsync(entry);
+        }
         else
         {
             bool reverted = AssetManager.RevertEbx(entry.Name);
@@ -431,6 +467,21 @@ public partial class DataExplorerViewModel : ViewModelBase
         RefreshAssetList();
         UpdateSelectedAssetDetails(m_selectedAsset);
         return Task.CompletedTask;
+    }
+
+    private async Task RevertSoundAssetAsync(EbxAssetEntry entry)
+    {
+        SoundOperationResult result = await SoundAssetEditorViewModel.RevertAsync(entry);
+        LogSoundOperationResult(result);
+        if (!result.Success)
+        {
+            return;
+        }
+
+        App.MainViewModel?.RefreshDocumentByKey(AssetEditorViewModel.CreateDocumentKey(entry));
+        UpdateAssetContextMenuVisibility();
+        RefreshAssetList();
+        UpdateSelectedAssetDetails(m_selectedAsset);
     }
 
     [RelayCommand]
@@ -517,7 +568,12 @@ public partial class DataExplorerViewModel : ViewModelBase
                 continue;
             }
 
-            if (!AssetEditStateTracker.IsModified(entry.Name))
+            bool isSoundAsset = SoundAssetEditorViewModel.IsSoundAsset(entry);
+            bool isModified = isSoundAsset
+                ? SoundAssetOperations.IsModified(entry)
+                : AssetEditStateTracker.IsModified(entry.Name);
+
+            if (!isModified)
             {
                 continue;
             }
@@ -535,6 +591,15 @@ public partial class DataExplorerViewModel : ViewModelBase
             else if (MeshAssetOperations.IsMeshAsset(entry))
             {
                 MeshOperationResult result = MeshAssetOperations.Revert(entry);
+                success = result.Success;
+                if (!success)
+                {
+                    FrostyLogger.Logger?.LogWarning(result.Message);
+                }
+            }
+            else if (isSoundAsset)
+            {
+                SoundOperationResult result = SoundAssetOperations.Revert(entry);
                 success = result.Success;
                 if (!success)
                 {
@@ -825,6 +890,8 @@ public partial class DataExplorerViewModel : ViewModelBase
                 ? TextureAssetOperations.IsModified(entry)
                 : MeshAssetOperations.IsMeshAsset(entry)
                     ? MeshAssetOperations.IsModified(entry)
+                : SoundAssetEditorViewModel.IsSoundAsset(entry)
+                    ? SoundAssetOperations.IsModified(entry)
                 : AssetManager.IsEbxModified(entry.Name);
         }
         m_revertAssetMenuItem.IsVisible = canRevert;
@@ -925,7 +992,7 @@ public partial class DataExplorerViewModel : ViewModelBase
         HandleAssetTapped(asset);
         if (openAsset && entry is EbxAssetEntry)
         {
-            OpenAsset();
+            _ = OpenAsset();
         }
     }
 
@@ -942,6 +1009,18 @@ public partial class DataExplorerViewModel : ViewModelBase
     }
 
     private static void LogMeshOperationResult(MeshOperationResult result)
+    {
+        if (result.Success)
+        {
+            FrostyLogger.Logger?.LogInfo(result.Message);
+        }
+        else
+        {
+            FrostyLogger.Logger?.LogWarning(result.Message);
+        }
+    }
+
+    private static void LogSoundOperationResult(SoundOperationResult result)
     {
         if (result.Success)
         {

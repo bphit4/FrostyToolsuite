@@ -12,7 +12,7 @@ public class AssetModel
 {
     public string? Name => Entry?.Filename;
     public string? Type => Entry?.Type;
-    public Bitmap Icon => AssetIconRegistry.GetIcon(Type);
+    public Bitmap Icon => AssetIconRegistry.GetIcon(Entry);
     public bool IsModified => AssetEditStateTracker.IsModified(Entry?.Name ?? string.Empty) ||
                               GetBoolProperty("IsModified") || HasProperty("ModifiedEntry");
     public bool IsAdded => GetBoolProperty("IsAdded") || HasEnumerableProperty("AddedBundles");

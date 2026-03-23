@@ -21,6 +21,11 @@ public static class PluginManager
             return new MeshAssetEditorViewModel(entry);
         }
 
+        if (SoundAssetEditorViewModel.IsSoundAsset(entry))
+        {
+            return new SoundAssetEditorViewModel(entry);
+        }
+
         if (s_ebxAssetEditors.TryGetValue(entry.Type.ToLower(), out Type? type) &&
             Activator.CreateInstance(type, entry) is AssetEditorViewModel editor)
         {

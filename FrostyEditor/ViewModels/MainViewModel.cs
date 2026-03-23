@@ -16,6 +16,8 @@ using FrostyEditor.Managers;
 using FrostyEditor.Models;
 using FrostyEditor.Utils;
 using FrostyEditor.Windows;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 
 namespace FrostyEditor.ViewModels;
 
@@ -23,6 +25,7 @@ public partial class MainViewModel : ViewModelBase
 {
     private string? m_currentProjectDirectory;
     private string m_currentProjectName = "FrostyToolsuite Project";
+    private bool m_isClosingDocuments;
 
     [ObservableProperty]
     private MenuViewModel m_menu = new();
@@ -94,6 +97,12 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(DocumentStatus));
         OnPropertyChanged(nameof(ActiveDocumentTitle));
         return true;
+    }
+
+    public DocumentModel? GetDocumentByKey(string key)
+    {
+        return Documents.FirstOrDefault(doc =>
+            string.Equals(doc.Key, key, StringComparison.OrdinalIgnoreCase));
     }
 
     public bool RefreshDocumentByKey(string key)
@@ -243,31 +252,36 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CloseActiveDocument()
+    private async Task CloseActiveDocument()
     {
         if (ActiveDocument is null || Documents.Count == 0)
         {
             return;
         }
 
-        CloseDocument(ActiveDocument);
+        await CloseDocumentAsync(ActiveDocument).ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private void CloseAllDocuments()
+    private async Task CloseAllDocuments()
     {
-        Documents.Clear();
-        Logger.LogInfo("Closed all open tabs.");
-        AddStartPage();
+        await CloseAllDocumentsCoreAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
-    private void ExitApplication()
+    private async Task ExitApplication()
     {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.Shutdown();
+            return;
         }
+
+        if (!await ConfirmCloseAllDocumentsAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        desktop.Shutdown();
     }
 
     [RelayCommand]
@@ -300,31 +314,30 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    public void CloseDocument(DocumentModel? document)
+    public async Task<bool> CloseDocumentAsync(DocumentModel? document)
     {
         if (document is null || Documents.Count == 0)
         {
-            return;
+            return true;
         }
 
-        int index = Documents.IndexOf(document);
-        if (index < 0)
+        if (!await EnsureDocumentCanCloseAsync(document).ConfigureAwait(true))
         {
-            return;
+            return false;
         }
 
-        Documents.RemoveAt(index);
-        Logger.LogInfo($"Closed tab '{document.Header}'.");
+        CloseDocumentCore(document);
+        return true;
+    }
 
-        if (Documents.Count == 0)
+    public async Task<bool> ConfirmCloseAllDocumentsAsync()
+    {
+        if (m_isClosingDocuments)
         {
-            AddStartPage();
-            return;
+            return false;
         }
 
-        ActiveDocument = Documents[Math.Clamp(index - 1, 0, Documents.Count - 1)];
-        OnPropertyChanged(nameof(DocumentStatus));
-        OnPropertyChanged(nameof(ActiveDocumentTitle));
+        return await CloseAllDocumentsCoreAsync(shutdownMode: true).ConfigureAwait(true);
     }
 
     private void AddStartPage()
@@ -356,7 +369,7 @@ public partial class MainViewModel : ViewModelBase
             Content = inContent
         };
 
-        model.CloseCommand = new RelayCommand(() => CloseDocument(model));
+        model.CloseCommand = new AsyncRelayCommand(() => CloseDocumentAsync(model));
         model.ActivateCommand = new RelayCommand(() => ActiveDocument = model);
 
         Documents.Add(model);
@@ -372,6 +385,109 @@ public partial class MainViewModel : ViewModelBase
         {
             Text = $"{inLead}{Environment.NewLine}{Environment.NewLine}{inBody}"
         });
+    }
+
+    private async Task<bool> CloseAllDocumentsCoreAsync(bool shutdownMode = false)
+    {
+        if (m_isClosingDocuments)
+        {
+            return false;
+        }
+
+        m_isClosingDocuments = true;
+        try
+        {
+            foreach (DocumentModel document in Documents.ToList())
+            {
+                if (!await EnsureDocumentCanCloseAsync(document).ConfigureAwait(true))
+                {
+                    return false;
+                }
+            }
+
+            Documents.Clear();
+            if (!shutdownMode)
+            {
+                Logger.LogInfo("Closed all open tabs.");
+                AddStartPage();
+            }
+
+            ActiveDocument = Documents.FirstOrDefault();
+            OnPropertyChanged(nameof(DocumentStatus));
+            OnPropertyChanged(nameof(ActiveDocumentTitle));
+            return true;
+        }
+        finally
+        {
+            m_isClosingDocuments = false;
+        }
+    }
+
+    private async Task<bool> EnsureDocumentCanCloseAsync(DocumentModel document)
+    {
+        if (document.Content is not ISaveableDocument saveable || !saveable.HasUnsavedChanges)
+        {
+            return true;
+        }
+
+        ButtonResult result = await MessageBoxManager
+            .GetMessageBoxStandard(
+                "FrostyEditor",
+                $"Save changes to '{document.Header}' before closing?",
+                ButtonEnum.YesNoCancel,
+                Icon.Question)
+            .ShowAsync()
+            .ConfigureAwait(true);
+
+        if (result == ButtonResult.Cancel)
+        {
+            return false;
+        }
+
+        if (result == ButtonResult.Yes)
+        {
+            if (!saveable.CanSaveDocument)
+            {
+                Logger.LogWarning($"'{document.Header}' has unsaved changes but cannot be saved in its current state.");
+                return false;
+            }
+
+            bool saved = await saveable.SaveDocumentAsync().ConfigureAwait(true);
+            if (!saved)
+            {
+                Logger.LogWarning($"Save failed for '{document.Header}'.");
+                return false;
+            }
+
+            if (document.Content is ISessionStateAwareDocument sessionAware)
+            {
+                sessionAware.RefreshSessionState();
+            }
+        }
+
+        return true;
+    }
+
+    private void CloseDocumentCore(DocumentModel document)
+    {
+        int index = Documents.IndexOf(document);
+        if (index < 0)
+        {
+            return;
+        }
+
+        Documents.RemoveAt(index);
+        Logger.LogInfo($"Closed tab '{document.Header}'.");
+
+        if (Documents.Count == 0)
+        {
+            AddStartPage();
+            return;
+        }
+
+        ActiveDocument = Documents[Math.Clamp(index - 1, 0, Documents.Count - 1)];
+        OnPropertyChanged(nameof(DocumentStatus));
+        OnPropertyChanged(nameof(ActiveDocumentTitle));
     }
 
     private void RefreshOpenDocumentSessionState()
