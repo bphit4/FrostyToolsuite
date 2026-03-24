@@ -120,11 +120,11 @@ public static class MeshAssetOperations
         {
             Title = "Export mesh",
             SuggestedFileName = entry.Filename,
-            DefaultExtension = "obj",
+            DefaultExtension = "fbx",
             FileTypeChoices =
             [
-                new FilePickerFileType("Wavefront OBJ (*.obj)") { Patterns = ["*.obj"] },
-                new FilePickerFileType("Autodesk FBX (*.fbx)") { Patterns = ["*.fbx"] }
+                new FilePickerFileType("Autodesk FBX (*.fbx)") { Patterns = ["*.fbx"] },
+                new FilePickerFileType("Wavefront OBJ (*.obj)") { Patterns = ["*.obj"] }
             ]
         };
 

@@ -70,15 +70,23 @@
                     Padding="5,0"
                     Margin="1,0"
                     VerticalAlignment="Center"
-                    Content="Export"
-                    Click="OnExportSegmentClick"/>
+                    Click="OnExportSegmentClick">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+                <TextBlock Text="Export" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
             <Button Grid.Column="9"
                     Classes="toolbar"
                     Padding="5,0"
                     Margin="1,0"
                     VerticalAlignment="Center"
-                    Content="Import"
-                    Click="OnImportSegmentClick"/>
+                    Click="OnImportSegmentClick">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,8 L6,8 L6,3 L8,3 L5,0 L2,3 L4,3 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+                <TextBlock Text="Import" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
         </Grid>
       </Border>
     </DataTemplate>
@@ -170,20 +178,50 @@
     <Border Classes="panel" Padding="1" Margin="0,0,0,2">
       <Grid ColumnDefinitions="*">
         <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsVariationsMode}">
-          <Button Classes="toolbar" Content="Export All" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}"/>
-          <Button Classes="toolbar" Content="Import All" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}"/>
+          <Button Classes="toolbar" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Export All" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Classes="toolbar" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,8 L6,8 L6,3 L8,3 L5,0 L2,3 L4,3 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Import All" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
           <Button Classes="toolbar" Content="Add New Sound" Command="{Binding AddCommand}" IsEnabled="{Binding CanAddItem}"/>
           <Button Classes="toolbar" Content="Switch to Data Set mode" Command="{Binding ToggleModeCommand}" IsEnabled="{Binding CanToggleMode}"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsDataSetsMode}">
-          <Button Classes="toolbar" Content="Export All" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}"/>
-          <Button Classes="toolbar" Content="Import All" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}"/>
+          <Button Classes="toolbar" Command="{Binding ExportBulkCommand}" IsEnabled="{Binding CanExportBulk}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Export All" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Classes="toolbar" Command="{Binding ImportBulkCommand}" IsEnabled="{Binding CanImportBulk}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,8 L6,8 L6,3 L8,3 L5,0 L2,3 L4,3 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Import All" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
           <Button Classes="toolbar" Content="Add New Sound" Command="{Binding AddCommand}" IsEnabled="{Binding CanAddItem}"/>
           <Button Classes="toolbar" Content="Switch to Variations mode" Command="{Binding ToggleModeCommand}" IsEnabled="{Binding CanToggleMode}"/>
           <Button Classes="toolbar" Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSaveAsset}"/>
-          <Button Classes="toolbar" Content="Export Data Set" Command="{Binding ExportDataSetCommand}" IsEnabled="{Binding CanExportDataSet}"/>
-          <Button Classes="toolbar" Content="Import Data Set" Command="{Binding ImportDataSetCommand}" IsEnabled="{Binding CanImportDataSet}"/>
+          <Button Classes="toolbar" Command="{Binding ExportDataSetCommand}" IsEnabled="{Binding CanExportDataSet}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Export Data Set" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Classes="toolbar" Command="{Binding ImportDataSetCommand}" IsEnabled="{Binding CanImportDataSet}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,8 L6,8 L6,3 L8,3 L5,0 L2,3 L4,3 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Import Data Set" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
         </StackPanel>
       </Grid>
     </Border>

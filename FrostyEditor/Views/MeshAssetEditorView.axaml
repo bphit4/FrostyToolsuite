@@ -428,7 +428,8 @@
     <Style Selector="ListBox.inspector-list">
       <Setter Property="Background" Value="#202025"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Padding" Value="0,0,14,14"/>
+      <Setter Property="Margin" Value="0,0,2,2"/>
     </Style>
     <Style Selector="ListBox.inspector-list ScrollViewer">
       <Setter Property="AllowAutoHide" Value="False"/>
@@ -436,6 +437,7 @@
       <Setter Property="IsScrollChainingEnabled" Value="False"/>
       <Setter Property="HorizontalScrollBarVisibility" Value="Visible"/>
       <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
+      <Setter Property="Margin" Value="0,0,1,1"/>
     </Style>
     <Style Selector="ListBox.inspector-list ScrollBar">
       <Setter Property="AllowAutoHide" Value="False"/>
@@ -528,102 +530,129 @@
 
   <Grid RowDefinitions="Auto,*">
     <Border Classes="panel" Padding="8" Margin="0,0,0,8">
-      <DockPanel LastChildFill="False">
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Classes="toolbar" Content="Export" Command="{Binding ExportMeshCommand}" />
-          <Button Classes="toolbar" Content="Import" Command="{Binding ImportMeshCommand}" />
-          <Button Classes="toolbar" Content="Revert" Command="{Binding RevertMeshCommand}" IsVisible="{Binding CanRevert}" />
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal"
+                    Spacing="4"
+                    VerticalAlignment="Center"
+                    ClipToBounds="True">
+          <Button Classes="toolbar" Command="{Binding ExportMeshCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Export" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Classes="toolbar" Command="{Binding ImportMeshCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,8 L6,8 L6,3 L8,3 L5,0 L2,3 L4,3 Z M1,9 L9,9 L9,10 L1,10 Z"/>
+              <TextBlock Text="Import" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Border Width="1"
+                  Height="22"
+                  Margin="4,0,6,0"
+                  Background="#4A4F58"
+                  VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Front" Click="OnFrontViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Back" Click="OnBackViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Left" Click="OnLeftViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Right" Click="OnRightViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Top" Click="OnTopViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Bottom" Click="OnBottomViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Perspective" Click="OnPerspectiveViewClick" VerticalAlignment="Center" />
+          <Border Width="1"
+                  Height="22"
+                  Margin="4,0,6,0"
+                  Background="#4A4F58"
+                  VerticalAlignment="Center" />
+          <TextBlock Text="LOD" Classes="subtle" VerticalAlignment="Center" />
+          <ComboBox Width="100"
+                    MinWidth="100"
+                    Height="28"
+                    MinHeight="28"
+                    MaxHeight="28"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Left"
+                    ItemsSource="{Binding Lods}"
+                    SelectedItem="{Binding SelectedLod, Mode=TwoWay}" />
+          <TextBlock Text="Mode" Classes="subtle" VerticalAlignment="Center" />
+          <ComboBox Width="128"
+                    MinWidth="128"
+                    Height="28"
+                    MinHeight="28"
+                    MaxHeight="28"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Left"
+                    ItemsSource="{Binding AvailableRenderModes}"
+                    SelectedItem="{Binding SelectedRenderMode, Mode=TwoWay}" />
+          <TextBlock Text="Channels" Classes="subtle" VerticalAlignment="Center" />
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <CheckBox IsChecked="{Binding RedChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+            <TextBlock Text="R" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <CheckBox IsChecked="{Binding GreenChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+            <TextBlock Text="G" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <CheckBox IsChecked="{Binding BlueChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+            <TextBlock Text="B" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <CheckBox IsChecked="{Binding AlphaChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+            <TextBlock Text="A" VerticalAlignment="Center" />
+          </StackPanel>
+          <Border Width="1"
+                  Height="22"
+                  Margin="4,0,6,0"
+                  Background="#4A4F58"
+                  VerticalAlignment="Center" />
+          <Button Classes="toolbar"
+                  Content="Revert"
+                  Command="{Binding RevertMeshCommand}"
+                  IsVisible="{Binding CanRevert}" />
         </StackPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
-          <TextBox Classes="mesh-value subtle"
-                   Text="{Binding MeshName}"
-                   FontWeight="SemiBold"
-                   MinWidth="220" />
-          <TextBox Classes="mesh-value subtle"
-                   Text="{Binding ResourceRid}"
-                   VerticalContentAlignment="Center"
-                   FontWeight="SemiBold"
-                   MinWidth="160" />
+
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <Button Classes="toolbar" Content="Reset View" Click="OnResetViewClick" VerticalAlignment="Center" />
+          <Button Classes="toolbar" Content="Refresh" Click="OnRefreshViewportClick" VerticalAlignment="Center" />
+          <Border Width="1"
+                  Height="22"
+                  Margin="4,0,6,0"
+                  Background="#4A4F58"
+                  VerticalAlignment="Center" />
+          <TextBlock Text="{Binding PreviewViewLabel}"
+                     Classes="subtle"
+                     FontWeight="Bold"
+                     VerticalAlignment="Center" />
         </StackPanel>
-      </DockPanel>
+      </Grid>
     </Border>
 
     <Grid Grid.Row="1" ColumnDefinitions="1.8*,0.95*">
       <Border Grid.Column="0" Classes="panel" Padding="10" Margin="0,0,10,0">
-        <Grid RowDefinitions="Auto,Auto,*,Auto">
-          <DockPanel LastChildFill="False">
-            <StackPanel DockPanel.Dock="Left">
-              <TextBlock Text="Mesh Viewport" FontWeight="SemiBold" />
-              <TextBox Classes="mesh-value subtle"
-                       Text="{Binding MeshFullName}"
-                       MinWidth="360" />
-            </StackPanel>
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-              <Button Classes="toolbar" Content="Reset View" Click="OnResetViewClick" />
-              <Button Classes="toolbar" Content="Refresh" Click="OnRefreshViewportClick" />
-              <TextBlock Text="{Binding PreviewViewLabel}" Classes="subtle" VerticalAlignment="Center" />
-            </StackPanel>
-          </DockPanel>
-
-          <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,8,0,8">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <Button Classes="toolbar" Content="Perspective" Click="OnPerspectiveViewClick" />
-              <Button Classes="toolbar" Content="Front" Click="OnFrontViewClick" />
-              <Button Classes="toolbar" Content="Back" Click="OnBackViewClick" />
-              <Button Classes="toolbar" Content="Left" Click="OnLeftViewClick" />
-              <Button Classes="toolbar" Content="Right" Click="OnRightViewClick" />
-              <Button Classes="toolbar" Content="Top" Click="OnTopViewClick" />
-              <Button Classes="toolbar" Content="Bottom" Click="OnBottomViewClick" />
-            </StackPanel>
-
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-              <TextBlock Text="LOD" Classes="subtle" VerticalAlignment="Center" />
-              <ComboBox Width="150"
-                        ItemsSource="{Binding Lods}"
-                        SelectedItem="{Binding SelectedLod, Mode=TwoWay}" />
-              <TextBlock Text="Mode" Classes="subtle" VerticalAlignment="Center" />
-              <ComboBox Width="136"
-                        ItemsSource="{Binding AvailableRenderModes}"
-                        SelectedItem="{Binding SelectedRenderMode, Mode=TwoWay}" />
-              <TextBlock Text="Channels" Classes="subtle" VerticalAlignment="Center" />
-              <CheckBox Content="R" IsChecked="{Binding RedChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
-              <CheckBox Content="G" IsChecked="{Binding GreenChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
-              <CheckBox Content="B" IsChecked="{Binding BlueChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
-              <CheckBox Content="A" IsChecked="{Binding AlphaChannelEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
-            </StackPanel>
-          </DockPanel>
-
-          <Border Grid.Row="2"
-                  Background="#171A20"
-                  BorderBrush="#2F3540"
-                  BorderThickness="1"
-                  CornerRadius="4"
-                  Padding="0"
-                  ClipToBounds="True">
-            <Grid>
-              <controls:WindowsMeshViewportHost x:Name="Viewport3D"
-                                                IsVisible="{Binding ShowGpuViewport}" />
-              <ScrollViewer IsVisible="{Binding ShowSoftwarePreview}"
-                            HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Auto">
-                <Image Source="{Binding PreviewBitmap}"
-                       IsVisible="{Binding HasPreviewBitmap}"
-                       Stretch="None"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
-              </ScrollViewer>
-            </Grid>
-          </Border>
-
-          <Grid Grid.Row="3" Margin="0,8,0,0" ColumnDefinitions="1.2*,1*">
-            <TextBox Classes="mesh-value subtle"
-                     Text="{Binding PreviewStatus}"
-                     Margin="0,0,10,0" />
-            <TextBox Grid.Column="1"
-                     Classes="mesh-value subtle"
-                     Text="{Binding PreviewInteractionSummary}" />
+        <Border Background="#171A20"
+                BorderBrush="#2F3540"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="0"
+                ClipToBounds="True">
+          <Grid>
+            <controls:WindowsMeshViewportHost x:Name="Viewport3D"
+                                              IsVisible="{Binding ShowGpuViewport}" />
+            <ScrollViewer IsVisible="{Binding ShowSoftwarePreview}"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+              <Image Source="{Binding PreviewBitmap}"
+                     IsVisible="{Binding HasPreviewBitmap}"
+                     Stretch="None"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"/>
+            </ScrollViewer>
           </Grid>
-        </Grid>
+        </Border>
       </Border>
 
       <Border Grid.Column="1" Classes="panel" Padding="8">

@@ -219,12 +219,19 @@ internal static class MeshVariationDatabaseManager
                 $"Building full MVDB cache in the background ({variationDatabaseEntries.Count} variation databases)...");
 
             Dictionary<Guid, Dictionary<uint, MeshVariationBuilder>> buildersByMeshGuid = [];
+            Dictionary<uint, EbxAssetEntry?> objectVariationEntryCache = [];
+            Dictionary<uint, PointerRef> objectVariationPointerCache = [];
             Stopwatch progressTimer = Stopwatch.StartNew();
 
             for (int variationDatabaseIndex = 0; variationDatabaseIndex < variationDatabaseEntries.Count; variationDatabaseIndex++)
             {
                 EbxAssetEntry variationDatabaseEntry = variationDatabaseEntries[variationDatabaseIndex];
                 EbxPartition partition = AssetManager.GetEbxPartition(variationDatabaseEntry);
+                PointerRef variationDatabasePointer = new(new EbxImportReference
+                {
+                    PartitionGuid = partition.PartitionGuid,
+                    InstanceGuid = partition.PrimaryInstanceGuid
+                });
                 object rootObject = partition.PrimaryInstance;
                 if (!MeshAssetOperations.TryGetMemberValue(rootObject, "Entries", out object? entriesValue) ||
                     entriesValue is null)
@@ -256,13 +263,24 @@ internal static class MeshVariationDatabaseManager
                     uint variationHash = ReadHash(candidate, "VariationAssetNameHash");
                     if (!variationsByHash.TryGetValue(variationHash, out MeshVariationBuilder? builder))
                     {
-                        EbxAssetEntry? objectVariationEntry = ResolveObjectVariationEntry(variationHash);
+                        if (!objectVariationEntryCache.TryGetValue(variationHash, out EbxAssetEntry? objectVariationEntry))
+                        {
+                            objectVariationEntry = ResolveObjectVariationEntry(variationHash);
+                            objectVariationEntryCache.Add(variationHash, objectVariationEntry);
+                        }
+
+                        if (!objectVariationPointerCache.TryGetValue(variationHash, out PointerRef objectVariationPointer))
+                        {
+                            objectVariationPointer = CreatePointer(objectVariationEntry);
+                            objectVariationPointerCache.Add(variationHash, objectVariationPointer);
+                        }
+
                         builder = new MeshVariationBuilder
                         {
                             Name = objectVariationEntry?.Filename ?? (variationHash == 0 ? "Default" : $"0x{variationHash:X8}"),
                             VariationAssetNameHash = variationHash,
                             VariationEntry = candidate,
-                            Variation = CreatePointer(objectVariationEntry)
+                            Variation = objectVariationPointer
                         };
                         builder.Materials.AddRange(BuildVariationMaterials(candidate));
                         variationsByHash.Add(variationHash, builder);
@@ -272,7 +290,19 @@ internal static class MeshVariationDatabaseManager
                         builder.VariationEntry ??= candidate;
                         if (builder.Variation.Type == PointerRefType.Null)
                         {
-                            builder.Variation = CreatePointer(ResolveObjectVariationEntry(variationHash));
+                            if (!objectVariationPointerCache.TryGetValue(variationHash, out PointerRef objectVariationPointer))
+                            {
+                                if (!objectVariationEntryCache.TryGetValue(variationHash, out EbxAssetEntry? objectVariationEntry))
+                                {
+                                    objectVariationEntry = ResolveObjectVariationEntry(variationHash);
+                                    objectVariationEntryCache.Add(variationHash, objectVariationEntry);
+                                }
+
+                                objectVariationPointer = CreatePointer(objectVariationEntry);
+                                objectVariationPointerCache.Add(variationHash, objectVariationPointer);
+                            }
+
+                            builder.Variation = objectVariationPointer;
                         }
 
                         if (builder.Materials.Count == 0)
@@ -283,7 +313,7 @@ internal static class MeshVariationDatabaseManager
 
                     builder.Locations.Add(new MeshVariationDatabaseLocation(
                         variationDatabaseEntry,
-                        CreatePointer(variationDatabaseEntry),
+                        variationDatabasePointer,
                         index));
 
                     index++;
@@ -495,6 +525,64 @@ internal static class MeshVariationDatabaseManager
     private static Dictionary<Guid, IReadOnlyList<MeshVariationRecord>> ReadCache(string cachePath)
     {
         Dictionary<Guid, IReadOnlyList<MeshVariationRecord>> variationsByMeshGuid = [];
+        Dictionary<Guid, EbxAssetEntry?> entryCache = [];
+        Dictionary<Guid, PointerRef> entryPointerCache = [];
+        Dictionary<uint, EbxAssetEntry?> objectVariationEntryCache = [];
+        Dictionary<uint, PointerRef> objectVariationPointerCache = [];
+
+        EbxAssetEntry? ResolveEntry(Guid guid)
+        {
+            if (guid == Guid.Empty)
+            {
+                return null;
+            }
+
+            if (!entryCache.TryGetValue(guid, out EbxAssetEntry? entry))
+            {
+                entry = AssetManager.GetEbxAssetEntry(guid);
+                entryCache.Add(guid, entry);
+            }
+
+            return entry;
+        }
+
+        PointerRef ResolveEntryPointer(Guid guid)
+        {
+            if (guid == Guid.Empty)
+            {
+                return new PointerRef();
+            }
+
+            if (!entryPointerCache.TryGetValue(guid, out PointerRef pointer))
+            {
+                pointer = CreatePointer(ResolveEntry(guid));
+                entryPointerCache.Add(guid, pointer);
+            }
+
+            return pointer;
+        }
+
+        PointerRef ResolveObjectVariationPointer(uint variationHash)
+        {
+            if (variationHash == 0)
+            {
+                return new PointerRef();
+            }
+
+            if (!objectVariationPointerCache.TryGetValue(variationHash, out PointerRef pointer))
+            {
+                if (!objectVariationEntryCache.TryGetValue(variationHash, out EbxAssetEntry? entry))
+                {
+                    entry = ResolveObjectVariationEntry(variationHash);
+                    objectVariationEntryCache.Add(variationHash, entry);
+                }
+
+                pointer = CreatePointer(entry);
+                objectVariationPointerCache.Add(variationHash, pointer);
+            }
+
+            return pointer;
+        }
 
         lock (c_cacheFileLock)
         {
@@ -526,6 +614,7 @@ internal static class MeshVariationDatabaseManager
             }
 
             int meshCount = reader.ReadInt32();
+            variationsByMeshGuid = new Dictionary<Guid, IReadOnlyList<MeshVariationRecord>>(meshCount);
             for (int meshIndex = 0; meshIndex < meshCount; meshIndex++)
             {
                 Guid meshGuid = ReadGuid(reader);
@@ -543,12 +632,12 @@ internal static class MeshVariationDatabaseManager
                     {
                         Guid variationDbGuid = ReadGuid(reader);
                         int dbIndex = reader.ReadInt32();
-                        EbxAssetEntry? variationDbEntry = AssetManager.GetEbxAssetEntry(variationDbGuid);
+                        EbxAssetEntry? variationDbEntry = ResolveEntry(variationDbGuid);
                         if (variationDbEntry is not null)
                         {
                             locations.Add(new MeshVariationDatabaseLocation(
                                 variationDbEntry,
-                                CreatePointer(variationDbEntry),
+                                ResolveEntryPointer(variationDbGuid),
                                 dbIndex));
                         }
                     }
@@ -567,9 +656,7 @@ internal static class MeshVariationDatabaseManager
                             string parameterName = reader.ReadString();
                             Guid textureEntryGuid = ReadGuid(reader);
                             PointerRef texturePointer = ReadPointer(reader);
-                            EbxAssetEntry? textureEntry = textureEntryGuid != Guid.Empty
-                                ? AssetManager.GetEbxAssetEntry(textureEntryGuid)
-                                : null;
+                            EbxAssetEntry? textureEntry = ResolveEntry(textureEntryGuid);
                             textures.Add(new MeshVariationTextureParameter(parameterName, texturePointer, textureEntry));
                         }
 
@@ -583,7 +670,7 @@ internal static class MeshVariationDatabaseManager
                         name,
                         variationHash,
                         null,
-                        CreatePointer(ResolveObjectVariationEntry(variationHash)),
+                        ResolveObjectVariationPointer(variationHash),
                         materials,
                         locations));
                 }

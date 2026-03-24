@@ -284,36 +284,95 @@ public static class MeshObjCodec
         MeshSet.MeshLod lod,
         MeshSet.MeshSection section)
     {
-        List<(MeshDecodedVertex[] Vertices, int[] Indices, DecodeQuality Quality, GeometryDeclarationDesc GeometryDeclaration, int GeometryDeclarationIndex, VertexDecodeMode DecodeMode, int IndexElementSize)> candidates = [];
-
-        for (int geometryDeclarationIndex = 0; geometryDeclarationIndex < section.GeometryDeclarations.Count; geometryDeclarationIndex++)
+        static void AddCandidates(
+            List<(MeshDecodedVertex[] Vertices, int[] Indices, DecodeQuality Quality, GeometryDeclarationDesc GeometryDeclaration, int GeometryDeclarationIndex, VertexDecodeMode DecodeMode, int IndexElementSize)> target,
+            byte[] candidateLodData,
+            MeshSet.MeshLod candidateLod,
+            MeshSet.MeshSection candidateSection,
+            GeometryDeclarationDesc candidateGeometryDeclaration,
+            int geometryDeclarationIndex,
+            IEnumerable<VertexDecodeMode> decodeModes,
+            IEnumerable<int> indexElementSizes)
         {
-            GeometryDeclarationDesc geometryDeclaration = section.GeometryDeclarations[geometryDeclarationIndex];
-            if (!HasUsableGeometryDeclaration(geometryDeclaration))
+            foreach (VertexDecodeMode decodeMode in decodeModes)
             {
-                continue;
+                MeshDecodedVertex[] vertices = ReadVertices(candidateLodData, candidateSection, candidateGeometryDeclaration, decodeMode);
+                if (vertices.Length == 0)
+                {
+                    continue;
+                }
+
+                foreach (int indexElementSize in indexElementSizes.Distinct())
+                {
+                    if (!TryReadIndices(candidateLodData, candidateLod, candidateSection, indexElementSize, out int[]? indices))
+                    {
+                        continue;
+                    }
+
+                    target.Add((vertices, indices, EvaluateDecodeQuality(vertices, indices, candidateSection), candidateGeometryDeclaration, geometryDeclarationIndex, decodeMode, indexElementSize));
+                }
+            }
+        }
+
+        List<(MeshDecodedVertex[] Vertices, int[] Indices, DecodeQuality Quality, GeometryDeclarationDesc GeometryDeclaration, int GeometryDeclarationIndex, VertexDecodeMode DecodeMode, int IndexElementSize)> candidates = [];
+        List<(MeshDecodedVertex[] Vertices, int[] Indices, DecodeQuality Quality, GeometryDeclarationDesc GeometryDeclaration, int GeometryDeclarationIndex, VertexDecodeMode DecodeMode, int IndexElementSize)> preferredCandidates = [];
+
+        GeometryDeclarationDesc? primaryGeometryDeclarationCandidate = section.GeometryDeclarations.FirstOrDefault(HasUsableGeometryDeclaration);
+        if (primaryGeometryDeclarationCandidate is not null)
+        {
+            GeometryDeclarationDesc primaryGeometryDeclaration = primaryGeometryDeclarationCandidate.Value;
+            int primaryGeometryDeclarationIndex = 0;
+            for (int geometryDeclarationIndex = 0; geometryDeclarationIndex < section.GeometryDeclarations.Count; geometryDeclarationIndex++)
+            {
+                if (Equals(section.GeometryDeclarations[geometryDeclarationIndex], primaryGeometryDeclaration))
+                {
+                    primaryGeometryDeclarationIndex = geometryDeclarationIndex;
+                    break;
+                }
             }
 
-            foreach (VertexDecodeMode decodeMode in Enum.GetValues<VertexDecodeMode>())
+            AddCandidates(
+                preferredCandidates,
+                lodData,
+                lod,
+                section,
+                primaryGeometryDeclaration,
+                primaryGeometryDeclarationIndex,
+                [VertexDecodeMode.ElementOffsets, VertexDecodeMode.SequentialStreamBlocks],
+                [lod.IndexElementSize]);
+        }
+
+        List<(MeshDecodedVertex[] Vertices, int[] Indices, DecodeQuality Quality, GeometryDeclarationDesc GeometryDeclaration, int GeometryDeclarationIndex, VertexDecodeMode DecodeMode, int IndexElementSize)> usablePreferredCandidates =
+            preferredCandidates
+                .Where(candidate => candidate.Quality.ValidTriangles > 0)
+                .ToList();
+
+        if (usablePreferredCandidates.Count > 0)
+        {
+            candidates.AddRange(usablePreferredCandidates);
+        }
+
+        if (candidates.Count == 0)
+        {
+            for (int geometryDeclarationIndex = 0; geometryDeclarationIndex < section.GeometryDeclarations.Count; geometryDeclarationIndex++)
             {
-                MeshDecodedVertex[] vertices = ReadVertices(lodData, section, geometryDeclaration, decodeMode);
-                if (vertices.Length == 0)
+                GeometryDeclarationDesc geometryDeclaration = section.GeometryDeclarations[geometryDeclarationIndex];
+                if (!HasUsableGeometryDeclaration(geometryDeclaration))
                 {
                     continue;
                 }
 
                 HashSet<int> candidateIndexSizes = [lod.IndexElementSize];
                 candidateIndexSizes.Add(lod.IndexElementSize == sizeof(uint) ? sizeof(ushort) : sizeof(uint));
-
-                foreach (int indexElementSize in candidateIndexSizes)
-                {
-                    if (!TryReadIndices(lodData, lod, section, indexElementSize, out int[]? indices))
-                    {
-                        continue;
-                    }
-
-                    candidates.Add((vertices, indices, EvaluateDecodeQuality(vertices, indices, section), geometryDeclaration, geometryDeclarationIndex, decodeMode, indexElementSize));
-                }
+                AddCandidates(
+                    candidates,
+                    lodData,
+                    lod,
+                    section,
+                    geometryDeclaration,
+                    geometryDeclarationIndex,
+                    Enum.GetValues<VertexDecodeMode>(),
+                    candidateIndexSizes);
             }
         }
 
@@ -412,6 +471,12 @@ public static class MeshObjCodec
                     int elementOffset = decodeMode == VertexDecodeMode.SequentialStreamBlocks
                         ? streamBaseOffset + currentStride
                         : streamBaseOffset + element.Offset;
+                    if (elementOffset < 0 || elementOffset + Math.Max(element.Size, 4) > lodData.Length)
+                    {
+                        currentStride += element.Size;
+                        continue;
+                    }
+
                     switch (element.Usage)
                     {
                         case VertexElementUsage.Pos:
@@ -520,9 +585,10 @@ public static class MeshObjCodec
         for (int i = 0; i < indices.Length; i++)
         {
             int offset = indexOffset + (i * indexElementSize);
-            indices[i] = indexElementSize == sizeof(uint)
+            int value = indexElementSize == sizeof(uint)
                 ? checked((int)BinaryPrimitives.ReadUInt32LittleEndian(lodData.AsSpan(offset, sizeof(uint))))
                 : BinaryPrimitives.ReadUInt16LittleEndian(lodData.AsSpan(offset, sizeof(ushort)));
+            indices[i] = value;
         }
 
         return true;
@@ -955,7 +1021,7 @@ public static class MeshObjCodec
     private static bool HasUsableGeometryDeclaration(GeometryDeclarationDesc geometryDeclaration)
     {
         return geometryDeclaration.Elements is not null &&
-               geometryDeclaration.Elements.Any(static element => element.Usage != VertexElementUsage.Unknown);
+               geometryDeclaration.Elements.Any(static element => element.Usage == VertexElementUsage.Pos);
     }
 
     private static GeometryDeclarationDesc.Element? GetFirstElement(
@@ -1006,6 +1072,10 @@ public static class MeshObjCodec
                 ReadHalf(data, offset),
                 ReadHalf(data, offset + 2),
                 ReadHalf(data, offset + 4)),
+            VertexElementFormat.Short4N => Vector3.Normalize(new Vector3(
+                ReadInt16(data, offset) / (float)short.MaxValue,
+                ReadInt16(data, offset + 2) / (float)short.MaxValue,
+                ReadInt16(data, offset + 4) / (float)short.MaxValue)),
             _ => Vector3.Zero
         };
     }

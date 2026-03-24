@@ -45,7 +45,8 @@ internal static class MeshViewportSceneBuilder
         string VariationName,
         PreviewTextureQuality TextureQuality,
         TextureChannelMask Channels,
-        bool IncludeNormalMaps);
+        bool IncludeNormalMaps,
+        bool ApplyAlwaysLitLift);
 
     private static readonly object c_cacheLock = new();
     private static readonly Dictionary<Guid, CachedSceneAssets> c_sceneCache = [];
@@ -58,6 +59,7 @@ internal static class MeshViewportSceneBuilder
     private static readonly ConcurrentDictionary<DeferredTextureWarmKey, Task> c_deferredTextureWarmTasks = [];
     private static int c_backgroundWarmupStarted;
     private static readonly string c_eyeFallbackTexturePath = Path.Combine(AppContext.BaseDirectory, "Assets", "MeshViewport", "eye_fallback_color.png");
+    private const string LitSceneNamePrefix = "__frosty_lit__:";
 
     public static void Prewarm(MeshAssetLoadResult load, string meshName, bool includeTextures)
     {
@@ -78,12 +80,16 @@ internal static class MeshViewportSceneBuilder
 
         StartBackgroundWarmup();
         bool includeTextures = stage != BuildStage.GeometryOnly;
+        // "Lit" in this editor is expected to remain evenly illuminated around the model.
+        // Keep it on the always-lit texture path, but use a restrained lift so we preserve detail.
+        bool litShading = false;
+        bool applyAlwaysLitLift = viewModel.SelectedRenderMode == MeshViewportRenderMode.Lit;
         int activeLodIndex = viewModel.SelectedLod?.Index ?? 0;
         TextureChannelMask activeChannels = ToTextureChannelMask(viewModel.ActiveChannelMask);
         PreviewTextureQuality textureQuality = stage == BuildStage.TexturedLowRes
             ? PreviewTextureQuality.LowRes
             : PreviewTextureQuality.HighRes;
-        bool includeNormalMaps = stage == BuildStage.Textured;
+        bool includeNormalMaps = false;
         Dictionary<string, byte[]> textureCache = [];
         List<MeshViewportLodData> lods = [];
         MeshVariationRecord? selectedVariation = viewModel.PreviewVariationRecord;
@@ -99,7 +105,7 @@ internal static class MeshViewportSceneBuilder
 
         if (includeTextures)
         {
-            PreloadTextures(viewModel.LoadResult, cachedAssets, bindings, activeLodIndex, textureQuality, activeChannels, includeNormalMaps);
+            PreloadTextures(viewModel.LoadResult, cachedAssets, bindings, activeLodIndex, textureQuality, activeChannels, includeNormalMaps, applyAlwaysLitLift);
         }
 
         foreach (CachedLodData lod in cachedAssets.Lods)
@@ -116,7 +122,7 @@ internal static class MeshViewportSceneBuilder
                 bool shouldLoadTexturesForSection = includeTextures && isActiveLod && isVisible;
 
                 byte[]? diffuseTexturePng = shouldLoadTexturesForSection
-                    ? ResolvePreviewDiffuseTexturePng(viewModel.LoadResult, section, binding, textureCache, textureQuality, activeChannels)
+                    ? ResolvePreviewDiffuseTexturePng(viewModel.LoadResult, section, binding, textureCache, textureQuality, activeChannels, applyAlwaysLitLift)
                     : null;
                 bool usePreviewNormalMap = shouldLoadTexturesForSection &&
                                            includeNormalMaps &&
@@ -130,7 +136,7 @@ internal static class MeshViewportSceneBuilder
                     Visible = isVisible,
                     DiffuseTexturePng = diffuseTexturePng,
                     NormalTexturePng = usePreviewNormalMap
-                        ? TryLoadTexturePng(binding?.NormalTextureEntry, textureCache, forceOpaqueAlpha: false, textureQuality, TextureChannelMask.Rgba, neutralizeEyelash: false)
+                        ? TryLoadTexturePng(binding?.NormalTextureEntry, textureCache, forceOpaqueAlpha: false, textureQuality, TextureChannelMask.Rgba, neutralizeEyelash: false, applyAlwaysLitLift: false)
                         : null
                 });
             }
@@ -144,7 +150,7 @@ internal static class MeshViewportSceneBuilder
 
         return new MeshViewportSceneData
         {
-            Name = viewModel.MeshName,
+            Name = BuildSceneName(viewModel.MeshName, litShading),
             ObjPath = cachedAssets.ObjPath,
             CurrentLod = viewModel.SelectedLod?.Index ?? 0,
             TexturesEnabled = viewModel.SelectedRenderMode is MeshViewportRenderMode.Lit or MeshViewportRenderMode.Base,
@@ -168,7 +174,8 @@ internal static class MeshViewportSceneBuilder
             ? PreviewTextureQuality.LowRes
             : PreviewTextureQuality.HighRes;
         TextureChannelMask activeChannels = ToTextureChannelMask(viewModel.ActiveChannelMask);
-        bool includeNormalMaps = stage == BuildStage.Textured;
+        bool includeNormalMaps = false;
+        bool applyAlwaysLitLift = viewModel.SelectedRenderMode == MeshViewportRenderMode.Lit;
         MeshVariationRecord? selectedVariation = viewModel.PreviewVariationRecord;
         DeferredTextureWarmKey warmKey = new(
             viewModel.LoadResult.Entry.Guid,
@@ -176,7 +183,8 @@ internal static class MeshViewportSceneBuilder
             selectedVariation?.Name ?? string.Empty,
             textureQuality,
             activeChannels,
-            includeNormalMaps);
+            includeNormalMaps,
+            applyAlwaysLitLift);
 
         c_deferredTextureWarmTasks.GetOrAdd(warmKey, _ => Task.Run(() =>
         {
@@ -203,6 +211,7 @@ internal static class MeshViewportSceneBuilder
                     textureQuality,
                     activeChannels,
                     includeNormalMaps,
+                    applyAlwaysLitLift,
                     maxDegreeOfParallelism: 1);
             }
             finally
@@ -219,7 +228,8 @@ internal static class MeshViewportSceneBuilder
         int activeLodIndex,
         PreviewTextureQuality textureQuality,
         TextureChannelMask activeChannels,
-        bool includeNormalMaps)
+        bool includeNormalMaps,
+        bool applyAlwaysLitLift)
     {
         PreloadTextures(
             load,
@@ -229,6 +239,7 @@ internal static class MeshViewportSceneBuilder
             textureQuality,
             activeChannels,
             includeNormalMaps,
+            applyAlwaysLitLift,
             maxDegreeOfParallelism: Math.Clamp(Environment.ProcessorCount / 2, 2, 4));
     }
 
@@ -240,6 +251,7 @@ internal static class MeshViewportSceneBuilder
         PreviewTextureQuality textureQuality,
         TextureChannelMask activeChannels,
         bool includeNormalMaps,
+        bool applyAlwaysLitLift,
         int maxDegreeOfParallelism)
     {
         Dictionary<string, TexturePreloadRequest> requests = [];
@@ -253,7 +265,7 @@ internal static class MeshViewportSceneBuilder
             foreach (CachedSectionData section in lod.Sections)
             {
                 MeshViewportMaterialBinding? binding = ResolveBinding(bindings, section.MaterialId, section.SectionIndex);
-                if (TryCreateDiffuseTexturePreloadRequest(load, section, binding, textureQuality, activeChannels, out TexturePreloadRequest? diffuseRequest))
+                if (TryCreateDiffuseTexturePreloadRequest(load, section, binding, textureQuality, activeChannels, applyAlwaysLitLift, out TexturePreloadRequest? diffuseRequest))
                 {
                     requests.TryAdd(diffuseRequest!.CacheKey, diffuseRequest);
                 }
@@ -424,6 +436,7 @@ internal static class MeshViewportSceneBuilder
         foreach (MeshObjCodec.MeshDecodedSection section in decodedSections)
         {
             Matrix4x4[]? palette = MeshViewportTransformResolver.ResolvePalette(load, section);
+
             builder.AppendLine();
             builder.AppendLine($"o {section.ObjectName}");
 
@@ -440,23 +453,13 @@ internal static class MeshViewportSceneBuilder
                     $"vt {vertex.Uv.X:0.######} {1.0f - vertex.Uv.Y:0.######}"));
             }
 
-            foreach (MeshObjCodec.MeshDecodedVertex vertex in section.Vertices)
-            {
-                MeshViewportTransformResolver.TransformVertex(section, vertex, palette, out _, out Vector3 normal);
-                Vector3 safeNormal = normal.LengthSquared() < 0.000001f
-                    ? Vector3.UnitY
-                    : Vector3.Normalize(normal);
-                builder.AppendLine(FormattableString.Invariant(
-                    $"vn {safeNormal.X:0.######} {safeNormal.Y:0.######} {safeNormal.Z:0.######}"));
-            }
-
             for (int i = 0; i < section.Indices.Length; i += 3)
             {
                 int a = vertexBase + section.Indices[i];
                 int b = vertexBase + section.Indices[i + 1];
                 int c = vertexBase + section.Indices[i + 2];
                 builder.AppendLine(FormattableString.Invariant(
-                    $"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}"));
+                    $"f {a}/{a} {b}/{b} {c}/{c}"));
             }
 
             vertexBase += section.Vertices.Length;
@@ -571,7 +574,8 @@ internal static class MeshViewportSceneBuilder
         MeshViewportMaterialBinding? binding,
         Dictionary<string, byte[]> cache,
         PreviewTextureQuality textureQuality,
-        TextureChannelMask channels)
+        TextureChannelMask channels,
+        bool applyAlwaysLitLift)
     {
         string? colorTexturePath = binding?.ColorTextureEntry?.Path;
         if (ShouldUseEyeFallbackTexture(load.Entry.Path, section.SectionName, colorTexturePath))
@@ -582,7 +586,7 @@ internal static class MeshViewportSceneBuilder
         if (binding?.ColorTextureEntry is not null)
         {
             bool neutralizeEyelash = IsEyelashSection(load.Entry.Path, section.SectionName, binding.ColorTextureEntry.Path);
-            return TryLoadTexturePng(binding.ColorTextureEntry, cache, forceOpaqueAlpha: true, textureQuality, channels, neutralizeEyelash);
+            return TryLoadTexturePng(binding.ColorTextureEntry, cache, forceOpaqueAlpha: true, textureQuality, channels, neutralizeEyelash, applyAlwaysLitLift);
         }
 
         if (!IsPlayerHeadEyeSection(load.Entry.Path, section.SectionName))
@@ -599,6 +603,7 @@ internal static class MeshViewportSceneBuilder
         MeshViewportMaterialBinding? binding,
         PreviewTextureQuality textureQuality,
         TextureChannelMask channels,
+        bool applyAlwaysLitLift,
         out TexturePreloadRequest? request)
     {
         string? colorTexturePath = binding?.ColorTextureEntry?.Path;
@@ -626,7 +631,7 @@ internal static class MeshViewportSceneBuilder
         if (binding?.ColorTextureEntry is not null)
         {
             bool neutralizeEyelash = IsEyelashSection(load.Entry.Path, section.SectionName, binding.ColorTextureEntry.Path);
-            string cacheKey = BuildTextureCacheKey(binding.ColorTextureEntry.Guid, forceOpaqueAlpha: true, textureQuality, channels, neutralizeEyelash);
+            string cacheKey = BuildTextureCacheKey(binding.ColorTextureEntry.Guid, forceOpaqueAlpha: true, textureQuality, channels, neutralizeEyelash, applyAlwaysLitLift);
             request = new TexturePreloadRequest(
                 cacheKey,
                 () => TryLoadTexturePng(
@@ -635,7 +640,8 @@ internal static class MeshViewportSceneBuilder
                     forceOpaqueAlpha: true,
                     textureQuality,
                     channels,
-                    neutralizeEyelash));
+                    neutralizeEyelash,
+                    applyAlwaysLitLift));
             return true;
         }
 
@@ -675,7 +681,7 @@ internal static class MeshViewportSceneBuilder
             return false;
         }
 
-        string cacheKey = BuildTextureCacheKey(binding.NormalTextureEntry.Guid, forceOpaqueAlpha: false, textureQuality, TextureChannelMask.Rgba, neutralizeEyelash: false);
+        string cacheKey = BuildTextureCacheKey(binding.NormalTextureEntry.Guid, forceOpaqueAlpha: false, textureQuality, TextureChannelMask.Rgba, neutralizeEyelash: false, applyAlwaysLitLift: false);
         request = new TexturePreloadRequest(
             cacheKey,
             () => TryLoadTexturePng(
@@ -684,7 +690,8 @@ internal static class MeshViewportSceneBuilder
                 forceOpaqueAlpha: false,
                 textureQuality,
                 TextureChannelMask.Rgba,
-                neutralizeEyelash: false));
+                neutralizeEyelash: false,
+                applyAlwaysLitLift: false));
         return true;
     }
 
@@ -811,14 +818,15 @@ internal static class MeshViewportSceneBuilder
         bool forceOpaqueAlpha,
         PreviewTextureQuality textureQuality,
         TextureChannelMask channels,
-        bool neutralizeEyelash)
+        bool neutralizeEyelash,
+        bool applyAlwaysLitLift)
     {
         if (textureEntry is null)
         {
             return null;
         }
 
-        string cacheKey = BuildTextureCacheKey(textureEntry.Guid, forceOpaqueAlpha, textureQuality, channels, neutralizeEyelash);
+        string cacheKey = BuildTextureCacheKey(textureEntry.Guid, forceOpaqueAlpha, textureQuality, channels, neutralizeEyelash, applyAlwaysLitLift);
         if (cache.TryGetValue(cacheKey, out byte[]? cachedBytes))
         {
             return cachedBytes;
@@ -850,6 +858,12 @@ internal static class MeshViewportSceneBuilder
                 false,
                 forceOpaqueAlpha,
                 neutralizeEyelash);
+
+            if (applyAlwaysLitLift && pngBytes.Length > 0)
+            {
+                pngBytes = ApplyAlwaysLitLiftToPng(pngBytes);
+            }
+
             cache[cacheKey] = pngBytes;
             lock (c_textureCacheLock)
             {
@@ -958,7 +972,7 @@ internal static class MeshViewportSceneBuilder
             textureQuality == PreviewTextureQuality.LowRes ? "|low" : "|high");
     }
 
-    private static string BuildTextureCacheKey(Guid textureGuid, bool forceOpaqueAlpha, PreviewTextureQuality textureQuality, TextureChannelMask channels, bool neutralizeEyelash)
+    private static string BuildTextureCacheKey(Guid textureGuid, bool forceOpaqueAlpha, PreviewTextureQuality textureQuality, TextureChannelMask channels, bool neutralizeEyelash, bool applyAlwaysLitLift)
     {
         return string.Concat(
             textureGuid.ToString("N"),
@@ -966,7 +980,8 @@ internal static class MeshViewportSceneBuilder
             textureQuality == PreviewTextureQuality.LowRes ? "|low" : "|high",
             "|",
             channels,
-            neutralizeEyelash ? "|eyelash" : string.Empty);
+            neutralizeEyelash ? "|eyelash" : string.Empty,
+            applyAlwaysLitLift ? "|alwayslit-v2" : string.Empty);
     }
 
     private static TextureChannelMask ToTextureChannelMask(MeshViewportChannelMask channels)
@@ -1040,5 +1055,72 @@ internal static class MeshViewportSceneBuilder
                 }
             }
         });
+    }
+
+    private static byte[] ApplyAlwaysLitLiftToPng(byte[] pngBytes)
+    {
+        using Image<Rgba32> image = Image.Load<Rgba32>(pngBytes);
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    Rgba32 pixel = row[x];
+                    if (pixel.A == 0)
+                    {
+                        continue;
+                    }
+
+                    float red = pixel.R / 255.0f;
+                    float green = pixel.G / 255.0f;
+                    float blue = pixel.B / 255.0f;
+                    float luminance = (red * 0.2126f) + (green * 0.7152f) + (blue * 0.0722f);
+                    if (luminance >= 0.24f)
+                    {
+                        row[x] = pixel;
+                        continue;
+                    }
+
+                    float shadowFactor = 1.0f - Math.Clamp(luminance / 0.24f, 0.0f, 1.0f);
+                    float liftAmount = (0.035f * shadowFactor) + (0.055f * shadowFactor * shadowFactor);
+                    float scale = (luminance + liftAmount) / MathF.Max(luminance, 0.05f);
+                    scale = Math.Clamp(scale, 1.0f, 1.18f);
+
+                    float liftedRed = red * scale;
+                    float liftedGreen = green * scale;
+                    float liftedBlue = blue * scale;
+                    float liftedLuminance = (liftedRed * 0.2126f) + (liftedGreen * 0.7152f) + (liftedBlue * 0.0722f);
+                    const float detailBoost = 1.06f;
+
+                    liftedRed = liftedLuminance + ((liftedRed - liftedLuminance) * detailBoost);
+                    liftedGreen = liftedLuminance + ((liftedGreen - liftedLuminance) * detailBoost);
+                    liftedBlue = liftedLuminance + ((liftedBlue - liftedLuminance) * detailBoost);
+
+                    row[x] = new Rgba32(
+                        ToPreviewByte(liftedRed),
+                        ToPreviewByte(liftedGreen),
+                        ToPreviewByte(liftedBlue),
+                        pixel.A);
+                }
+            }
+        });
+
+        using MemoryStream stream = new();
+        image.Save(stream, new PngEncoder());
+        return stream.ToArray();
+    }
+
+    private static byte ToPreviewByte(float value)
+    {
+        return (byte)Math.Clamp(MathF.Round(value * 255.0f), 0.0f, 255.0f);
+    }
+
+    private static string BuildSceneName(string meshName, bool litShading)
+    {
+        return litShading
+            ? LitSceneNamePrefix + meshName
+            : meshName;
     }
 }

@@ -31,7 +31,7 @@ public partial class MainViewModel : ViewModelBase
     private MenuViewModel m_menu = new();
 
     [ObservableProperty]
-    private DataExplorerViewModel m_dataExplorer = new();
+    private DataExplorerViewModel m_dataExplorer = null!;
 
     [ObservableProperty]
     private LoggerViewModel m_logger = new();
@@ -62,14 +62,14 @@ public partial class MainViewModel : ViewModelBase
             Logger = logger;
         }
 
-        DataExplorer.PropertyChanged += OnDataExplorerPropertyChanged;
-        Logger.SetExplorerSelectedAsset(DataExplorer.SelectedAssetEntry);
-
         Logger.LogInfo("Editor shell initialized.");
         MeshVariationDatabaseManager.StartBackgroundWarmup();
+        DataExplorer = new DataExplorerViewModel();
+        DataExplorer.PropertyChanged += OnDataExplorerPropertyChanged;
+        Logger.SetExplorerSelectedAsset(DataExplorer.SelectedAssetEntry);
         _ = Task.Run(async () =>
         {
-            await Task.Delay(1500).ConfigureAwait(false);
+            await Task.Delay(250).ConfigureAwait(false);
             MeshVariationDatabaseManager.StartFullCacheBuildIfNeeded();
         });
     }

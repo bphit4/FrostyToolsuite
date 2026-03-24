@@ -34,6 +34,13 @@ internal static class MeshViewportTransformResolver
     {
         position = vertex.Position;
         normal = vertex.Normal.LengthSquared() > 0.000001f ? Vector3.Normalize(vertex.Normal) : Vector3.UnitZ;
+        if (section.Lod.Type == MeshType.Skinned)
+        {
+            // Madden skinned mesh preview data already appears to decode in the usable rest pose.
+            // Applying the viewport skin palette a second time twists limbs and head geometry.
+            return;
+        }
+
         if (palette is null || palette.Length == 0)
         {
             return;

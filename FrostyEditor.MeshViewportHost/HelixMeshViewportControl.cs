@@ -13,6 +13,7 @@ using HelixToolkit.Wpf.SharpDX.Assimp;
 using HelixToolkit.Wpf.SharpDX.Model;
 using HelixToolkit.Wpf.SharpDX.Model.Scene;
 using Color4 = SharpDX.Color4;
+using BoundingBox = SharpDX.BoundingBox;
 using MediaColor = System.Windows.Media.Color;
 using MediaPoint3D = System.Windows.Media.Media3D.Point3D;
 using MediaRect3D = System.Windows.Media.Media3D.Rect3D;
@@ -45,7 +46,14 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
     private readonly HelixToolkit.Wpf.SharpDX.PerspectiveCamera m_perspectiveCamera;
     private readonly Viewport3DX m_viewport;
     private readonly DirectionalLight3D m_mainDirectionalLight;
+    private readonly DirectionalLight3D m_fillLightLeft;
+    private readonly DirectionalLight3D m_fillLightRight;
+    private readonly DirectionalLight3D m_topFillLight;
+    private readonly DirectionalLight3D m_upperRearFillLight;
+    private readonly DirectionalLight3D m_lowerFillLight;
+    private readonly AmbientLight3D m_ambientLight;
     private readonly MaterialCore m_fallbackMaterial;
+    private const string LitSceneNamePrefix = "__frosty_lit__:";
     private MeshViewportSceneData? m_sceneData;
     private MeshViewportViewPreset m_currentPreset = MeshViewportViewPreset.Perspective;
     private string? m_loadedObjPath;
@@ -79,10 +87,13 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
             EnableSwapChainRendering = true,
             ShowViewCube = false,
             ShowCameraTarget = false,
+            IsShadowMappingEnabled = false,
             Orthographic = false,
             CameraMode = CameraMode.Inspect,
             FixedRotationPointEnabled = true,
-            ZoomAroundMouseDownPoint = true,
+            // Keep zoom centered on the scene so very long/thin meshes do not drift off-screen
+            // or become hard to recover after a few wheel steps.
+            ZoomAroundMouseDownPoint = false,
             EffectsManager = m_effectsManager,
             Camera = m_perspectiveCamera,
             BackgroundColor = (MediaColor)ColorConverter.ConvertFromString("#161A1F")!
@@ -92,16 +103,27 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         m_viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Pan, new MouseGesture(MouseAction.LeftClick)));
         m_viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Zoom, new MouseGesture(MouseAction.MiddleClick)));
         m_viewport.InputBindings.Add(new KeyBinding(ViewportCommands.ZoomExtents, new KeyGesture(Key.Z, ModifierKeys.Control)));
+        m_viewport.CameraChanged += OnViewportCameraChanged;
 
-        m_mainDirectionalLight = new DirectionalLight3D { Direction = new MediaVector3D(0.0, 0.0, -1.0), Color = (MediaColor)ColorConverter.ConvertFromString("#7C7C7C")! };
+        // Balanced studio-style lighting for skin and cloth: a warmer front key, soft side fills,
+        // a restrained rear rim, and modest ambient to preserve texture detail.
+        m_mainDirectionalLight = CreateDirectionalLight("#8A847A");
+        m_fillLightLeft = CreateDirectionalLight("#51565E");
+        m_fillLightRight = CreateDirectionalLight("#51565E");
+        m_topFillLight = CreateDirectionalLight("#6A7078");
+        m_upperRearFillLight = CreateDirectionalLight("#5A5A58");
+        m_lowerFillLight = CreateDirectionalLight("#262A31");
+        m_ambientLight = new AmbientLight3D { Color = (MediaColor)ColorConverter.ConvertFromString("#24272C")! };
         m_viewport.Items.Add(m_mainDirectionalLight);
-        m_viewport.Items.Add(new DirectionalLight3D { Direction = new MediaVector3D(-1.0, -1.0, -1.0), Color = (MediaColor)ColorConverter.ConvertFromString("#A4A4A4")! });
-        m_viewport.Items.Add(new DirectionalLight3D { Direction = new MediaVector3D(1.0, -1.0, -0.1), Color = (MediaColor)ColorConverter.ConvertFromString("#686868")! });
-        m_viewport.Items.Add(new DirectionalLight3D { Direction = new MediaVector3D(0.1, 1.0, -1.0), Color = (MediaColor)ColorConverter.ConvertFromString("#3C3C3C")! });
-        m_viewport.Items.Add(new DirectionalLight3D { Direction = new MediaVector3D(0.1, 0.1, 1.0), Color = (MediaColor)ColorConverter.ConvertFromString("#323232")! });
-        m_viewport.Items.Add(new AmbientLight3D { Color = (MediaColor)ColorConverter.ConvertFromString("#1D1D1D")! });
+        m_viewport.Items.Add(m_fillLightLeft);
+        m_viewport.Items.Add(m_fillLightRight);
+        m_viewport.Items.Add(m_topFillLight);
+        m_viewport.Items.Add(m_upperRearFillLight);
+        m_viewport.Items.Add(m_lowerFillLight);
+        m_viewport.Items.Add(m_ambientLight);
         m_viewport.Items.Add(new Element3DPresenter { Content = m_groupModel });
         m_fallbackMaterial = CreateFallbackMaterial();
+        UpdateLightingRig();
 
         Content = new Grid
         {
@@ -119,6 +141,8 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         {
             return;
         }
+
+        bool litShading = IsLitShadingScene(scene);
 
         if (CanReuseLoadedScene(scene))
         {
@@ -143,6 +167,9 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
 
         Importer importer = new();
         importer.Configuration.AssimpPostProcessSteps &= ~Assimp.PostProcessSteps.FindDegenerates;
+        importer.Configuration.AssimpPostProcessSteps |=
+            Assimp.PostProcessSteps.GenerateSmoothNormals |
+            Assimp.PostProcessSteps.JoinIdenticalVertices;
         importer.Configuration.CullMode = SharpDX.Direct3D11.CullMode.None;
         using FileStream stream = new(scene.ObjPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         ErrorCode errorCode = importer.Load(stream, scene.ObjPath, Path.GetExtension(scene.ObjPath), out HelixToolkitScene importedScene);
@@ -165,8 +192,8 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
                     continue;
                 }
 
-                MaterialCore material = CreateMaterial(section);
-                string materialKey = BuildMaterialKey(section);
+                MaterialCore material = CreateMaterial(section, litShading);
+                string materialKey = BuildMaterialKey(section, litShading);
                 ApplyMaterialToNodes(sectionNodes, material);
 
                 lodSections.Add(new SectionVisualState
@@ -222,6 +249,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         }
 
         m_sceneBounds = MediaRect3D.Empty;
+        UpdateLightingEnabledState(texturesEnabled && m_sceneData is not null && IsLitShadingScene(m_sceneData));
     }
 
     public void ApplyView(MeshViewportViewPreset preset)
@@ -243,6 +271,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
             camera.UpDirection = up;
         }
 
+        UpdateLightingRigFromCamera();
         EnsureCurrentProjectionFitsBounds();
     }
 
@@ -260,6 +289,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
 
         m_disposed = true;
         SizeChanged -= OnHostSizeChanged;
+        m_viewport.CameraChanged -= OnViewportCameraChanged;
         m_groupModel.Clear(true);
         m_viewport.Items.Clear();
         Content = null;
@@ -288,6 +318,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         if (m_viewport.Camera is HelixToolkit.Wpf.SharpDX.OrthographicCamera orthographicCamera)
         {
             FitOrthographicToBounds(orthographicCamera);
+            UpdateDynamicClipPlanes();
             m_pendingSceneFit = false;
             return true;
         }
@@ -295,6 +326,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         if (m_viewport.Camera is HelixToolkit.Wpf.SharpDX.PerspectiveCamera perspectiveCamera)
         {
             FitPerspectiveToBounds(perspectiveCamera);
+            UpdateDynamicClipPlanes();
             m_pendingSceneFit = false;
             return true;
         }
@@ -416,11 +448,124 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         TryFitCurrentProjectionToBounds();
     }
 
+    private void OnViewportCameraChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateLightingRigFromCamera();
+        UpdateDynamicClipPlanes();
+    }
+
     private double GetViewportAspectRatio()
     {
         return m_viewport.ActualHeight > 0.00001
             ? Math.Max(m_viewport.ActualWidth / m_viewport.ActualHeight, 0.00001)
             : 1.0;
+    }
+
+    private void UpdateLightingRig()
+    {
+        m_mainDirectionalLight.Direction = new MediaVector3D(-0.18, -0.34, -0.92);
+        m_upperRearFillLight.Direction = new MediaVector3D(0.10, -0.12, 0.98);
+        m_fillLightLeft.Direction = new MediaVector3D(0.88, -0.08, -0.46);
+        m_fillLightRight.Direction = new MediaVector3D(-0.88, -0.08, -0.46);
+        m_topFillLight.Direction = new MediaVector3D(0.0, -0.96, -0.28);
+        m_lowerFillLight.Direction = new MediaVector3D(0.0, 0.92, -0.40);
+    }
+
+    private void UpdateLightingRigFromCamera()
+    {
+        if (m_viewport.Camera is not HelixToolkit.Wpf.SharpDX.Camera camera)
+        {
+            UpdateLightingRig();
+            return;
+        }
+
+        MediaVector3D forward = camera.LookDirection;
+        if (forward.LengthSquared <= 0.00001)
+        {
+            UpdateLightingRig();
+            return;
+        }
+
+        forward.Normalize();
+        MediaVector3D up = NormalizeUp(forward, camera.UpDirection);
+        MediaVector3D right = MediaVector3D.CrossProduct(forward, up);
+        if (right.LengthSquared <= 0.00001)
+        {
+            UpdateLightingRig();
+            return;
+        }
+
+        right.Normalize();
+
+        // Keep the lighting rig camera-relative so the visible side of the mesh
+        // stays naturally readable regardless of whether the user is on front/back/side views.
+        m_mainDirectionalLight.Direction = NormalizeDirection(forward + (-right * 0.18) + (-up * 0.30));
+        m_fillLightLeft.Direction = NormalizeDirection(forward + (right * 0.55) + (-up * 0.08));
+        m_fillLightRight.Direction = NormalizeDirection(forward + (-right * 0.55) + (-up * 0.08));
+        m_topFillLight.Direction = NormalizeDirection(forward + (-up * 0.88));
+        m_upperRearFillLight.Direction = NormalizeDirection((-forward * 0.92) + (-up * 0.12));
+        m_lowerFillLight.Direction = NormalizeDirection(forward + (up * 0.68));
+    }
+
+    private void UpdateDynamicClipPlanes()
+    {
+        MediaRect3D bounds = GetSceneBounds();
+        if (bounds.IsEmpty || m_viewport.Camera is not HelixToolkit.Wpf.SharpDX.Camera camera)
+        {
+            return;
+        }
+
+        MediaPoint3D center = new(
+            bounds.X + (bounds.SizeX * 0.5),
+            bounds.Y + (bounds.SizeY * 0.5),
+            bounds.Z + (bounds.SizeZ * 0.5));
+
+        double maxSize = Math.Max(bounds.SizeX, Math.Max(bounds.SizeY, bounds.SizeZ));
+        double sceneRadius = Math.Max(maxSize * 0.5, 1.0);
+        MediaVector3D forward = camera.LookDirection;
+        if (forward.LengthSquared <= 0.00001)
+        {
+            return;
+        }
+
+        forward.Normalize();
+        MediaVector3D toCenter = center - camera.Position;
+        double centerDistance = Math.Abs(MediaVector3D.DotProduct(toCenter, forward));
+        m_viewport.FixedRotationPoint = center;
+
+        if (camera is HelixToolkit.Wpf.SharpDX.PerspectiveCamera perspectiveCamera)
+        {
+            perspectiveCamera.NearPlaneDistance = 0.0001;
+            perspectiveCamera.FarPlaneDistance = Math.Max(centerDistance + (sceneRadius * 20.0), 10000.0);
+            return;
+        }
+
+        if (camera is HelixToolkit.Wpf.SharpDX.OrthographicCamera orthographicCamera)
+        {
+            double orthoDistance = Math.Max(orthographicCamera.LookDirection.Length, sceneRadius * 2.0);
+            orthographicCamera.NearPlaneDistance = 0.0001;
+            orthographicCamera.FarPlaneDistance = Math.Max(orthoDistance + (sceneRadius * 20.0), 10000.0);
+        }
+    }
+
+    private static DirectionalLight3D CreateDirectionalLight(string colorHex)
+    {
+        return new DirectionalLight3D
+        {
+            Color = (MediaColor)ColorConverter.ConvertFromString(colorHex)!,
+            Direction = new MediaVector3D(0.0, 0.0, -1.0)
+        };
+    }
+
+    private static MediaVector3D NormalizeDirection(MediaVector3D value)
+    {
+        if (value.LengthSquared <= 0.00001)
+        {
+            return new MediaVector3D(0.0, 0.0, -1.0);
+        }
+
+        value.Normalize();
+        return value;
     }
 
     private static MediaVector3D NormalizeUp(MediaVector3D direction, MediaVector3D up)
@@ -516,32 +661,52 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
         };
     }
 
-    private MaterialCore CreateMaterial(MeshViewportSectionData section)
+    private MaterialCore CreateMaterial(MeshViewportSectionData section, bool litShading)
     {
-        string materialKey = BuildMaterialKey(section);
+        string materialKey = BuildMaterialKey(section, litShading);
         if (m_materialCache.TryGetValue(materialKey, out MaterialCacheEntry? cached))
         {
             return cached.Material;
         }
 
-        PhongMaterial material = new()
+        MaterialCore material;
+        if (litShading)
         {
-            AmbientColor = Colors.Gray.ToColor4(),
-            DiffuseColor = Colors.White.ToColor4(),
-            SpecularColor = Colors.Black.ToColor4(),
-            SpecularShininess = 0.0f,
-            RenderShadowMap = true
-        };
+            PhongMaterialCore phongMaterial = new()
+            {
+                DiffuseColor = Colors.White.ToColor4(),
+                AmbientColor = new Color4(0.10f, 0.10f, 0.10f, 1.0f),
+                EmissiveColor = new Color4(0.018f, 0.018f, 0.018f, 1.0f),
+                SpecularColor = new Color4(0.028f, 0.028f, 0.028f, 1.0f),
+                SpecularShininess = 12.0f,
+                ReflectiveColor = new Color4(0.0f, 0.0f, 0.0f, 1.0f),
+                RenderShadowMap = false,
+                RenderEnvironmentMap = false
+            };
 
-        if (section.DiffuseTexturePng is { Length: > 0 })
-        {
-            material.DiffuseMap = new TextureModel(new MemoryStream(section.DiffuseTexturePng, writable: false));
+            if (section.DiffuseTexturePng is { Length: > 0 })
+            {
+                phongMaterial.DiffuseMap = new TextureModel(new MemoryStream(section.DiffuseTexturePng, writable: false));
+                phongMaterial.RenderDiffuseMap = true;
+            }
+
+            material = phongMaterial;
         }
-
-        if (section.NormalTexturePng is { Length: > 0 })
+        else
         {
-            material.NormalMap = new TextureModel(new MemoryStream(section.NormalTexturePng, writable: false));
-            material.RenderNormalMap = true;
+            DiffuseMaterialCore diffuseMaterial = new()
+            {
+                DiffuseColor = Colors.White.ToColor4(),
+                EnableUnLit = true
+            };
+
+            if (section.DiffuseTexturePng is { Length: > 0 })
+            {
+                diffuseMaterial.DiffuseMap = new TextureModel(new MemoryStream(section.DiffuseTexturePng, writable: false));
+                diffuseMaterial.RenderDiffuseMap = true;
+            }
+
+            material = diffuseMaterial;
         }
 
         m_materialCache[materialKey] = new MaterialCacheEntry { Material = material };
@@ -579,10 +744,11 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
                 MeshViewportSectionData next = sections[sectionIndex];
                 visibilityChanged |= current.Visible != next.Visible;
                 current.Visible = next.Visible;
-                string nextMaterialKey = BuildMaterialKey(next);
+                bool litShading = IsLitShadingScene(scene);
+                string nextMaterialKey = BuildMaterialKey(next, litShading);
                 if (!string.Equals(current.MaterialKey, nextMaterialKey, StringComparison.Ordinal))
                 {
-                    MaterialCore material = CreateMaterial(next);
+                    MaterialCore material = CreateMaterial(next, litShading);
                     foreach (MeshNode node in current.Nodes)
                     {
                         if (!ReferenceEquals(node.Material, material))
@@ -607,25 +773,53 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
     {
         m_nodesByObjectName.Clear();
         m_importedSectionGroups.Clear();
+
+        List<(string Key, List<MeshNode> Nodes)> orderedNamedGroups = [];
+        Dictionary<string, List<MeshNode>> namedGroups = new(StringComparer.Ordinal);
+
         foreach (SceneNode rootItem in importedScene.Root.Items)
         {
-            List<MeshNode> nodes = [];
+            List<MeshNode> rootNodes = [];
             foreach (SceneNode node in rootItem.Traverse())
             {
                 if (node is MeshNode meshNode)
                 {
-                    nodes.Add(meshNode);
+                    rootNodes.Add(meshNode);
+
+                    string meshKey = NormalizeLookupKey(meshNode.Name);
+                    if (string.IsNullOrWhiteSpace(meshKey))
+                    {
+                        continue;
+                    }
+
+                    if (!namedGroups.TryGetValue(meshKey, out List<MeshNode>? meshGroup))
+                    {
+                        meshGroup = [];
+                        namedGroups.Add(meshKey, meshGroup);
+                        orderedNamedGroups.Add((meshKey, meshGroup));
+                    }
+
+                    meshGroup.Add(meshNode);
                 }
             }
 
-            if (nodes.Count > 0)
+            if (rootNodes.Count > 0)
             {
-                m_importedSectionGroups.Add(nodes);
-                RegisterImportedNodes(rootItem.Name, nodes);
-                foreach (MeshNode meshNode in nodes)
-                {
-                    RegisterImportedNodes(meshNode.Name, nodes);
-                }
+                RegisterImportedNodes(rootItem.Name, rootNodes);
+            }
+        }
+
+        foreach ((string key, List<MeshNode> nodes) in orderedNamedGroups)
+        {
+            if (nodes.Count == 0)
+            {
+                continue;
+            }
+
+            m_importedSectionGroups.Add(nodes);
+            if (!m_nodesByObjectName.ContainsKey(key))
+            {
+                m_nodesByObjectName.Add(key, nodes);
             }
         }
     }
@@ -692,15 +886,79 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
             return m_sceneBounds;
         }
 
-        m_viewport.UpdateLayout();
-        m_sceneBounds = m_viewport.FindBounds3D();
+        bool found = false;
+        Rect3D bounds = Rect3D.Empty;
+        foreach (List<SectionVisualState> lod in m_lodSections)
+        {
+            foreach (SectionVisualState section in lod)
+            {
+                foreach (MeshNode node in section.Nodes)
+                {
+                    if (!node.Visible)
+                    {
+                        continue;
+                    }
+
+                    Rect3D nodeBounds = ToRect3D(node.BoundsWithTransform);
+                    if (!found)
+                    {
+                        bounds = nodeBounds;
+                        found = true;
+                    }
+                    else
+                    {
+                        bounds.Union(nodeBounds);
+                    }
+                }
+            }
+        }
+
+        m_sceneBounds = found ? bounds : MediaRect3D.Empty;
         return m_sceneBounds;
     }
 
-    private static string BuildMaterialKey(MeshViewportSectionData section)
+    private static Rect3D ToRect3D(BoundingBox bounds)
+    {
+        return new Rect3D(
+            bounds.Minimum.X,
+            bounds.Minimum.Y,
+            bounds.Minimum.Z,
+            bounds.Maximum.X - bounds.Minimum.X,
+            bounds.Maximum.Y - bounds.Minimum.Y,
+            bounds.Maximum.Z - bounds.Minimum.Z);
+    }
+
+    private void UpdateLightingEnabledState(bool litShading)
+    {
+        float litIntensity = litShading ? 1.0f : 0.0f;
+        m_mainDirectionalLight.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#8A847A")!, litIntensity);
+        m_fillLightLeft.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#51565E")!, litIntensity);
+        m_fillLightRight.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#51565E")!, litIntensity);
+        m_topFillLight.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#6A7078")!, litIntensity);
+        m_upperRearFillLight.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#5A5A58")!, litIntensity);
+        m_lowerFillLight.Color = ScaleColor((MediaColor)ColorConverter.ConvertFromString("#262A31")!, litIntensity);
+        m_ambientLight.Color = litShading
+            ? (MediaColor)ColorConverter.ConvertFromString("#24272C")!
+            : (MediaColor)ColorConverter.ConvertFromString("#000000")!;
+    }
+
+    private static MediaColor ScaleColor(MediaColor color, float intensity)
+    {
+        byte Scale(byte component) => (byte)Math.Clamp((int)Math.Round(component * intensity), 0, 255);
+        return MediaColor.FromArgb(color.A, Scale(color.R), Scale(color.G), Scale(color.B));
+    }
+
+    private static bool IsLitShadingScene(MeshViewportSceneData scene)
+    {
+        return scene.Name.StartsWith(LitSceneNamePrefix, StringComparison.Ordinal);
+    }
+
+    private static string BuildMaterialKey(MeshViewportSectionData section, bool litShading)
     {
         return string.Concat(
             section.MaterialId.ToString(),
+            "|",
+            litShading ? "lit" : "base",
             "|",
             BuildTextureKey(section.DiffuseTexturePng),
             "|",
@@ -722,13 +980,10 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
 
     private static MaterialCore CreateFallbackMaterial()
     {
-        return new PhongMaterialCore
+        return new DiffuseMaterialCore
         {
-            AmbientColor = Colors.Gray.ToColor4(),
             DiffuseColor = new Color4(0.88f, 0.45f, 0.22f, 1.0f),
-            SpecularColor = Colors.Black.ToColor4(),
-            SpecularShininess = 0.0f,
-            RenderShadowMap = true
+            EnableUnLit = true
         };
     }
 }
