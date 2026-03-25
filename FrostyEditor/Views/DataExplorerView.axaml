@@ -10,59 +10,109 @@
              x:CompileBindings="True">
   <UserControl.Styles>
     <Style Selector="ToggleButton.explorer-tab-toggle">
-      <Setter Property="Background" Value="#313136"/>
-      <Setter Property="BorderBrush" Value="#4A4A50"/>
+      <Setter Property="Background" Value="#1F1F23"/>
+      <Setter Property="BorderBrush" Value="#34343A"/>
       <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="CornerRadius" Value="3,3,0,0"/>
-      <Setter Property="Padding" Value="12,7"/>
-      <Setter Property="Margin" Value="0,4,1,0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Margin" Value="0,0,1,0"/>
       <Setter Property="MinWidth" Value="118"/>
       <Setter Property="FontSize" Value="12"/>
     </Style>
 
     <Style Selector="ToggleButton.explorer-tab-toggle:checked">
-      <Setter Property="Background" Value="#383840"/>
-      <Setter Property="BorderBrush" Value="#5F5F68"/>
+      <Setter Property="Background" Value="#3C3C41"/>
+      <Setter Property="BorderBrush" Value="#62626A"/>
     </Style>
 
     <Style Selector="Border.explorer-counter-strip">
-      <Setter Property="Background" Value="#303036"/>
-      <Setter Property="BorderBrush" Value="#4A4A50"/>
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderBrush" Value="#35353B"/>
       <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="CornerRadius" Value="3"/>
-      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="4,2"/>
     </Style>
 
     <Style Selector="Border.explorer-filter-strip">
-      <Setter Property="Background" Value="#2B2B30"/>
-      <Setter Property="BorderBrush" Value="#505058"/>
+      <Setter Property="Background" Value="#19191C"/>
+      <Setter Property="BorderBrush" Value="#323238"/>
       <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="CornerRadius" Value="2"/>
-      <Setter Property="Padding" Value="5,2"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="4,2"/>
     </Style>
 
     <Style Selector="ComboBox.explorer-filter-combo">
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
       <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Padding" Value="10,0,24,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="ComboBox.explorer-filter-combo /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="ComboBox.explorer-filter-combo /template/ PathIcon">
+      <Setter Property="Foreground" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="ComboBox.explorer-filter-combo /template/ Popup#PART_Popup">
+      <Setter Property="Placement" Value="BottomEdgeAlignedLeft"/>
+      <Setter Property="HorizontalOffset" Value="0"/>
     </Style>
 
     <Style Selector="Border.explorer-filter-strip TextBlock">
-      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <Style Selector="Border.explorer-filter-strip CheckBox">
+    <Style Selector="Image.explorer-filter-icon">
+      <Setter Property="Width" Value="11"/>
+      <Setter Property="Height" Value="11"/>
+      <Setter Property="Margin" Value="0,0,4,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="TextBlock.explorer-filter-label">
+      <Setter Property="Margin" Value="0,0,4,0"/>
       <Setter Property="FontSize" Value="11"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="TextBox.explorer-header-input">
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="Grid.explorer-inline-search Image">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Opacity" Value="0.8"/>
+    </Style>
+
+    <Style Selector="CheckBox.explorer-filter-check">
+      <Setter Property="FontSize" Value="9.5"/>
+      <Setter Property="MinHeight" Value="18"/>
+      <Setter Property="Padding" Value="2,0,0,0"/>
+      <Setter Property="Margin" Value="2,0,2,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
   </UserControl.Styles>
 
   <UserControl.Resources>
     <DataTemplate x:Key="FolderNameCell"
-                  DataType="models:FolderTreeNodeModel">
-      <StackPanel Orientation="Horizontal" Margin="4,0,4,0">
+                  x:DataType="models:FolderTreeNodeModel">
+      <StackPanel Orientation="Horizontal" Margin="1,0,1,0">
         <Image Source="{Binding FolderIcon}"
                Width="16"
                Height="16"
-               Margin="0 0 6 0"
+               Margin="0 0 4 0"
                HorizontalAlignment="Left"
                VerticalAlignment="Center"/>
         <TextBlock Text="{Binding Name}"
@@ -71,8 +121,8 @@
     </DataTemplate>
 
     <DataTemplate x:Key="AssetNameCell"
-                  DataType="models:AssetModel">
-      <StackPanel Orientation="Horizontal" Margin="4,0,4,0" Spacing="5">
+                  x:DataType="models:AssetModel">
+      <StackPanel Orientation="Horizontal" Margin="1,0,1,0" Spacing="4">
         <Image Source="{Binding Icon}"
                Width="16"
                Height="16"
@@ -87,12 +137,12 @@
     </DataTemplate>
 
     <DataTemplate x:Key="LegacyFolderNameCell"
-                  DataType="models:LegacyFolderTreeNodeModel">
-      <StackPanel Orientation="Horizontal" Margin="4,0,4,0">
+                  x:DataType="models:LegacyFolderTreeNodeModel">
+      <StackPanel Orientation="Horizontal" Margin="1,0,1,0">
         <Image Source="{Binding FolderIcon}"
                Width="16"
                Height="16"
-               Margin="0 0 6 0"
+               Margin="0 0 4 0"
                HorizontalAlignment="Left"
                VerticalAlignment="Center"/>
         <TextBlock Text="{Binding Name}"
@@ -101,8 +151,8 @@
     </DataTemplate>
 
     <DataTemplate x:Key="LegacyAssetNameCell"
-                  DataType="models:LegacyAssetModel">
-      <StackPanel Orientation="Horizontal" Margin="4,0,4,0" Spacing="5">
+                  x:DataType="models:LegacyAssetModel">
+      <StackPanel Orientation="Horizontal" Margin="1,0,1,0" Spacing="4">
         <Image Source="{Binding Icon}"
                Width="16"
                Height="16"
@@ -114,7 +164,7 @@
     </DataTemplate>
   </UserControl.Resources>
 
-  <Grid RowDefinitions="Auto,Auto,*">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="0">
     <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,0">
       <ToggleButton Grid.Column="0"
                     Classes="explorer-tab-toggle"
@@ -142,129 +192,128 @@
         </StackPanel>
       </ToggleButton>
 
-      <Border Grid.Column="3"
-              Classes="explorer-counter-strip"
-              VerticalAlignment="Bottom">
-        <Grid>
-          <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding IsDataExplorerSelected}">
-            <StackPanel>
-              <TextBlock Text="Folders" Classes="subtle"/>
-              <TextBlock Text="{Binding FolderCount}" FontWeight="SemiBold"/>
-            </StackPanel>
-            <StackPanel>
-              <TextBlock Text="Assets" Classes="subtle"/>
-              <TextBlock Text="{Binding TotalAssetCount}" FontWeight="SemiBold"/>
-            </StackPanel>
-          </StackPanel>
-
-          <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding IsLegacyExplorerSelected}">
-            <StackPanel>
-              <TextBlock Text="Folders" Classes="subtle"/>
-              <TextBlock Text="{Binding LegacyExplorer.FolderCount}" FontWeight="SemiBold"/>
-            </StackPanel>
-            <StackPanel>
-              <TextBlock Text="Assets" Classes="subtle"/>
-              <TextBlock Text="{Binding LegacyExplorer.TotalAssetCount}" FontWeight="SemiBold"/>
-            </StackPanel>
-          </StackPanel>
-        </Grid>
-      </Border>
+      <Button Grid.Column="3"
+              Classes="quick-icon"
+              Width="24"
+              Height="20"
+              Margin="8,0,0,0"
+              VerticalAlignment="Bottom"
+              Click="OnToggleDockClicked"
+              ToolTip.Tip="Dock or Undock Explorer">
+        <TextBlock Text="[]"
+                   FontFamily="Consolas"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Center"/>
+      </Button>
     </Grid>
 
-    <Border Grid.Row="1" Classes="explorer-filter-strip" Margin="0,-1,0,6">
+    <Border Grid.Row="1" Classes="explorer-filter-strip" Margin="0,-1,0,2">
       <Grid>
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" IsVisible="{Binding IsDataExplorerSelected}">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" MinHeight="22" IsVisible="{Binding IsDataExplorerSelected}">
           <Image Grid.Column="0"
-                 Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png"
-                 Width="13"
-                 Height="13"
-                 VerticalAlignment="Center"/>
-          <TextBlock Grid.Column="1" Text="Show Only:" Margin="5,0,5,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="2" Content="Modified" IsChecked="{Binding ShowModifiedOnly}" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="3" Content="Unmodified" IsChecked="{Binding ShowUnmodifiedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="4" Content="Unsaved" IsChecked="{Binding ShowUnsavedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="5" Content="Added" IsChecked="{Binding ShowAddedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                 Classes="explorer-filter-icon"
+                 Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png"/>
+          <TextBlock Grid.Column="1" Classes="explorer-filter-label" Text="Show Only:"/>
+          <CheckBox Grid.Column="2" Classes="explorer-filter-check" Content="Modified" IsChecked="{Binding ShowModifiedOnly}"/>
+          <CheckBox Grid.Column="3" Classes="explorer-filter-check" Content="Unmodified" IsChecked="{Binding ShowUnmodifiedOnly}"/>
+          <CheckBox Grid.Column="4" Classes="explorer-filter-check" Content="Unsaved" IsChecked="{Binding ShowUnsavedOnly}"/>
+          <CheckBox Grid.Column="5" Classes="explorer-filter-check" Content="Added" IsChecked="{Binding ShowAddedOnly}"/>
         </Grid>
 
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" IsVisible="{Binding IsLegacyExplorerSelected}">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" MinHeight="22" IsVisible="{Binding IsLegacyExplorerSelected}">
           <Image Grid.Column="0"
-                 Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png"
-                 Width="13"
-                 Height="13"
-                 VerticalAlignment="Center"/>
-          <TextBlock Grid.Column="1" Text="Show Only:" Margin="5,0,5,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="2" Content="Modified" IsChecked="{Binding LegacyExplorer.ShowModifiedOnly}" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="3" Content="Unmodified" IsChecked="{Binding LegacyExplorer.ShowUnmodifiedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="4" Content="Unsaved" IsChecked="{Binding LegacyExplorer.ShowUnsavedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-          <CheckBox Grid.Column="5" Content="Added" IsChecked="{Binding LegacyExplorer.ShowAddedOnly}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                 Classes="explorer-filter-icon"
+                 Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/OpenFolder.png"/>
+          <TextBlock Grid.Column="1" Classes="explorer-filter-label" Text="Show Only:"/>
+          <CheckBox Grid.Column="2" Classes="explorer-filter-check" Content="Modified" IsChecked="{Binding LegacyExplorer.ShowModifiedOnly}"/>
+          <CheckBox Grid.Column="3" Classes="explorer-filter-check" Content="Unmodified" IsChecked="{Binding LegacyExplorer.ShowUnmodifiedOnly}"/>
+          <CheckBox Grid.Column="4" Classes="explorer-filter-check" Content="Unsaved" IsChecked="{Binding LegacyExplorer.ShowUnsavedOnly}"/>
+          <CheckBox Grid.Column="5" Classes="explorer-filter-check" Content="Added" IsChecked="{Binding LegacyExplorer.ShowAddedOnly}"/>
         </Grid>
       </Grid>
     </Border>
 
     <Grid Grid.Row="2">
-      <Grid IsVisible="{Binding IsDataExplorerSelected}"
-            RowDefinitions="Auto,Auto,2.25*,6,*">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,140" Margin="0,0,0,6">
-          <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center"/>
-          <ComboBox Grid.Column="1"
-                    x:Name="DataTypeCombo"
-                    Classes="explorer-filter-combo"
-                    Margin="6,0,0,0"
-                    ItemsSource="{Binding AvailableAssetTypes}"
-                    SelectedItem="{Binding SelectedAssetTypeFilter}"/>
-          <TextBox Grid.Column="3"
-                   Classes="search-box"
-                   Margin="8,0,0,0"
+      <Grid x:Name="ExplorerGrid"
+            IsVisible="{Binding IsDataExplorerSelected}"
+            RowDefinitions="Auto,Auto,2.25*,2,*">
+        <Grid x:Name="DataTypeFilterRow" Grid.Row="0" ColumnDefinitions="*,140" Margin="0,0,0,2" MinHeight="28">
+          <Grid Grid.Column="0">
+            <ComboBox x:Name="DataTypeCombo"
+                      Classes="explorer-filter-combo"
+                      Margin="0"
+                      Width="{Binding AssetTypeComboMinWidth}"
+                      ItemsSource="{Binding AvailableAssetTypes}"
+                      SelectedItem="{Binding SelectedAssetTypeFilter}"
+                      DropDownOpened="TypeCombo_OnDropDownOpened">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding .}"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding SelectedAssetTypeFilterDisplay}"
+                       Margin="10,0,24,0"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Foreground="White"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="▼"
+                       Margin="0,0,9,0"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       IsHitTestVisible="False"
+                       Foreground="White"
+                       FontSize="10"/>
+          </Grid>
+          <TextBox x:Name="DataTypeFilterTextBox"
+                   Grid.Column="1"
+                   Classes="search-box explorer-header-input"
+                   Margin="4,0,0,0"
                    Watermark="Filter types"
                    TextChanged="TypeFilterTextBox_OnTextChanged"
                    Text="{Binding AssetTypeSearchText}"/>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
-          <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1"
-                   x:Name="DataSearchBox"
-                   Classes="search-box"
-                   Margin="6,0,0,0"
-                   Watermark="Filter"
-                   Text="{Binding FilterText}" />
+        <Grid Grid.Row="1" ColumnDefinitions="*" Margin="0,0,0,2" MinHeight="28">
+          <Grid Grid.Column="0" Classes="explorer-inline-search">
+            <TextBox x:Name="DataSearchBox"
+                     Classes="search-box explorer-header-input"
+                     Margin="0"
+                     Watermark="Search Assets"
+                     Text="{Binding FilterText}"
+                     Padding="26,0,8,0" />
+            <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Filter.png"
+                    Width="12"
+                    Height="12"
+                   Margin="8,0,0,0"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"/>
+          </Grid>
         </Grid>
 
-        <Border Grid.Row="2" Classes="panel" Padding="8">
-          <Grid RowDefinitions="Auto,*">
-            <DockPanel Margin="6,2,6,6">
-              <TextBlock Text="Folders" Classes="subtle"/>
-              <TextBlock Text="{Binding SelectedFolderName}" Classes="subtle" HorizontalAlignment="Right"/>
-            </DockPanel>
-            <TreeDataGrid x:Name="FolderTree"
-                          Grid.Row="1"
-                          Margin="2,0,2,2"
-                          Source="{Binding FolderSource}"
-                          ContextFlyout="{Binding FolderContextMenu, Mode=OneWay}"
-                          PointerPressed="FolderTree_OnPointerPressed"
-                          Tapped="FolderTree_OnTapped"
-                          DoubleTapped="FolderTree_OnDoubleTapped"/>
-          </Grid>
+        <Border Grid.Row="2" Classes="panel" Padding="1">
+          <TreeDataGrid x:Name="FolderTree"
+                        Margin="0"
+                        Source="{Binding FolderSource}"
+                        ContextFlyout="{Binding FolderContextMenu, Mode=OneWay}"
+                        PointerPressed="FolderTree_OnPointerPressed"
+                        Tapped="FolderTree_OnTapped"
+                        DoubleTapped="FolderTree_OnDoubleTapped"/>
         </Border>
 
         <GridSplitter Grid.Row="3"
-                      Height="6"
+                      Height="2"
                       Background="#3B3B3B"
                       HorizontalAlignment="Stretch"
                       ResizeDirection="Rows"/>
 
-        <Border Grid.Row="4" Classes="panel" Padding="8">
-          <Grid RowDefinitions="Auto,*">
-            <DockPanel Margin="6,2,6,6">
-              <StackPanel>
-                <TextBlock Text="{Binding SelectedAssetName}" FontWeight="SemiBold" FontSize="12"/>
-                <TextBlock Text="{Binding SelectedAssetPath}" Classes="subtle" TextTrimming="CharacterEllipsis"/>
-              </StackPanel>
-              <TextBlock Text="{Binding SelectedAssetCountLabel}" Classes="subtle" HorizontalAlignment="Right"/>
-            </DockPanel>
+        <Border Grid.Row="4" Classes="panel" Padding="1">
+          <Grid RowDefinitions="*">
             <TreeDataGrid x:Name="AssetsTree"
-                          Grid.Row="1"
-                          Margin="2,0,2,2"
+                          Grid.Row="0"
+                          Margin="0"
                           Source="{Binding AssetsSource}"
                           ContextFlyout="{Binding AssetContextMenu, Mode=OneWay}"
                           PointerPressed="AssetsTree_OnPointerPressed"
@@ -274,36 +323,96 @@
       </Grid>
 
       <Grid IsVisible="{Binding IsLegacyExplorerSelected}"
-            RowDefinitions="Auto,Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,140" Margin="0,0,0,6">
-          <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center"/>
-          <ComboBox Grid.Column="1"
-                    x:Name="LegacyTypeCombo"
-                    Classes="explorer-filter-combo"
-                    Margin="6,0,0,0"
-                    ItemsSource="{Binding LegacyExplorer.AvailableAssetTypes}"
-                    SelectedItem="{Binding LegacyExplorer.SelectedAssetTypeFilter}"/>
-          <TextBox Grid.Column="3"
-                   Classes="search-box"
-                   Margin="8,0,0,0"
-                   Watermark="Filter types"
-                   TextChanged="LegacyTypeFilterTextBox_OnTextChanged"
+            RowDefinitions="Auto,Auto,2.25*,2,*">
+        <Grid x:Name="LegacyTypeFilterRow" Grid.Row="0" ColumnDefinitions="*,140" Margin="0,0,0,2" MinHeight="28">
+          <Grid Grid.Column="0">
+            <ComboBox x:Name="LegacyTypeCombo"
+                      Classes="explorer-filter-combo"
+                      Margin="0"
+                      Width="{Binding LegacyExplorer.AssetTypeComboMinWidth}"
+                      ItemsSource="{Binding LegacyExplorer.AvailableAssetTypes}"
+                      SelectedItem="{Binding LegacyExplorer.SelectedAssetTypeFilter}"
+                      DropDownOpened="TypeCombo_OnDropDownOpened">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding .}"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding LegacyExplorer.SelectedAssetTypeFilterDisplay}"
+                       Margin="10,0,24,0"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Foreground="White"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="▼"
+                       Margin="0,0,9,0"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       IsHitTestVisible="False"
+                       Foreground="White"
+                       FontSize="10"/>
+          </Grid>
+          <TextBox x:Name="LegacyTypeFilterTextBox"
+                    Grid.Column="1"
+                    Classes="search-box explorer-header-input"
+                    Margin="4,0,0,0"
+                    Watermark="Filter types"
+                    TextChanged="LegacyTypeFilterTextBox_OnTextChanged"
                    Text="{Binding LegacyExplorer.AssetTypeSearchText}"
                    IsEnabled="{Binding LegacyExplorer.HasAssets}"/>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
-          <TextBlock Grid.Column="0" Text="Search:" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1"
-                   x:Name="LegacySearchBox"
-                   Classes="search-box"
-                   Margin="6,0,0,0"
-                   Watermark="Filter"
-                   Text="{Binding LegacyExplorer.FilterText}"
-                   IsEnabled="{Binding LegacyExplorer.HasAssets}"/>
+        <Grid Grid.Row="1" ColumnDefinitions="*" Margin="0,0,0,2" MinHeight="28">
+          <Grid Grid.Column="0" Classes="explorer-inline-search">
+            <TextBox x:Name="LegacySearchBox"
+                     Classes="search-box explorer-header-input"
+                     Margin="0"
+                     Watermark="Search Assets"
+                     Text="{Binding LegacyExplorer.FilterText}"
+                     Padding="26,0,8,0"
+                     IsEnabled="{Binding LegacyExplorer.HasAssets}"/>
+            <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Filter.png"
+                   Width="12"
+                   Height="12"
+                   Margin="8,0,0,0"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"/>
+          </Grid>
         </Grid>
 
+        <Border Grid.Row="2" Classes="panel" Padding="1" IsVisible="{Binding LegacyExplorer.ShowExplorer}">
+          <TreeDataGrid x:Name="LegacyFolderTree"
+                        Margin="0"
+                        Source="{Binding LegacyExplorer.FolderSource}"
+                        ContextFlyout="{Binding LegacyExplorer.FolderContextMenu, Mode=OneWay}"
+                        PointerPressed="LegacyFolderTree_OnPointerPressed"
+                        Tapped="LegacyFolderTree_OnTapped"
+                        DoubleTapped="LegacyFolderTree_OnDoubleTapped"/>
+        </Border>
+
+        <GridSplitter Grid.Row="3"
+                      Height="2"
+                      Background="#3B3B3B"
+                      HorizontalAlignment="Stretch"
+                      ResizeDirection="Rows"
+                      IsVisible="{Binding LegacyExplorer.ShowExplorer}"/>
+
+        <Border Grid.Row="4" Classes="panel" Padding="1" IsVisible="{Binding LegacyExplorer.ShowExplorer}">
+          <Grid RowDefinitions="*">
+            <TreeDataGrid x:Name="LegacyAssetsTree"
+                          Grid.Row="0"
+                          Margin="0"
+                          Source="{Binding LegacyExplorer.AssetsSource}"
+                          ContextFlyout="{Binding LegacyExplorer.AssetContextMenu, Mode=OneWay}"
+                          PointerPressed="LegacyAssetsTree_OnPointerPressed"
+                          DoubleTapped="LegacyAssetsTree_OnDoubleTapped"/>
+          </Grid>
+        </Border>
+
         <Border Grid.Row="2"
+                Grid.RowSpan="3"
                 Classes="panel"
                 Padding="12"
                 IsVisible="{Binding LegacyExplorer.ShowMessagePanel}">
@@ -321,53 +430,6 @@
             </Border>
           </Grid>
         </Border>
-
-        <Grid x:Name="LegacyExplorerGrid"
-              Grid.Row="2"
-              RowDefinitions="Auto,2.25*,6,*"
-              IsVisible="{Binding LegacyExplorer.ShowExplorer}">
-          <Border Grid.Row="0" Classes="panel" Padding="8">
-            <DockPanel Margin="6,2,6,6">
-              <TextBlock Text="Folders" Classes="subtle"/>
-              <TextBlock Text="{Binding LegacyExplorer.SelectedFolderName}" Classes="subtle" HorizontalAlignment="Right"/>
-            </DockPanel>
-          </Border>
-
-          <Border Grid.Row="1" Classes="panel" Padding="8" Margin="0,6,0,0">
-            <TreeDataGrid x:Name="LegacyFolderTree"
-                          Margin="2,0,2,2"
-                          Source="{Binding LegacyExplorer.FolderSource}"
-                          ContextFlyout="{Binding LegacyExplorer.FolderContextMenu, Mode=OneWay}"
-                          PointerPressed="LegacyFolderTree_OnPointerPressed"
-                          Tapped="LegacyFolderTree_OnTapped"
-                          DoubleTapped="LegacyFolderTree_OnDoubleTapped"/>
-          </Border>
-
-          <GridSplitter Grid.Row="2"
-                        Height="6"
-                        Background="#3B3B3B"
-                        HorizontalAlignment="Stretch"
-                        ResizeDirection="Rows"/>
-
-          <Border Grid.Row="3" Classes="panel" Padding="8">
-            <Grid RowDefinitions="Auto,*">
-              <DockPanel Margin="6,2,6,6">
-                <StackPanel>
-                  <TextBlock Text="{Binding LegacyExplorer.SelectedAssetName}" FontWeight="SemiBold" FontSize="12"/>
-                  <TextBlock Text="{Binding LegacyExplorer.SelectedAssetPath}" Classes="subtle" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-                <TextBlock Text="{Binding LegacyExplorer.SelectedAssetCountLabel}" Classes="subtle" HorizontalAlignment="Right"/>
-              </DockPanel>
-              <TreeDataGrid x:Name="LegacyAssetsTree"
-                            Grid.Row="1"
-                            Margin="2,0,2,2"
-                            Source="{Binding LegacyExplorer.AssetsSource}"
-                            ContextFlyout="{Binding LegacyExplorer.AssetContextMenu, Mode=OneWay}"
-                            PointerPressed="LegacyAssetsTree_OnPointerPressed"
-                            DoubleTapped="LegacyAssetsTree_OnDoubleTapped"/>
-            </Grid>
-          </Border>
-        </Grid>
       </Grid>
     </Grid>
   </Grid>

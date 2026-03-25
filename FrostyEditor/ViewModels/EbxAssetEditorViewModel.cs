@@ -161,6 +161,16 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
         UpdateInspectorNameColumnWidth(VisibleNodes);
     }
 
+    public InspectorNodeModel? FindNodeByPath(string? nodePath)
+    {
+        if (string.IsNullOrWhiteSpace(nodePath))
+        {
+            return null;
+        }
+
+        return FindNodeByPath(Nodes, nodePath);
+    }
+
     private async void DebounceApplyFilter()
     {
         m_filterCts?.Cancel();
@@ -316,6 +326,31 @@ public sealed partial class EbxAssetEditorViewModel : AssetEditorViewModel, ISes
                 yield return child;
             }
         }
+    }
+
+    private static InspectorNodeModel? FindNodeByPath(IEnumerable<InspectorNodeModel> nodes, string nodePath)
+    {
+        foreach (InspectorNodeModel node in nodes)
+        {
+            if (string.Equals(node.NodePath, nodePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return node;
+            }
+
+            node.EnsureChildrenLoaded();
+            if (node.Children.Count == 0)
+            {
+                continue;
+            }
+
+            InspectorNodeModel? match = FindNodeByPath(node.Children.Where(static child => !child.IsPlaceholder), nodePath);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     private static void RemoveVisibleDescendants(ObservableCollection<InspectorNodeModel> visibleNodes, int nodeIndex, int parentDepth)

@@ -1,10 +1,12 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FrostyEditor.Models;
@@ -15,6 +17,7 @@ namespace FrostyEditor.Views;
 public partial class LoggerView : UserControl
 {
     private TextBox? m_loggerTextBox;
+    private ScrollViewer? m_loggerScrollViewer;
     private LoggerViewModel? m_viewModel;
 
     public LoggerView()
@@ -27,6 +30,7 @@ public partial class LoggerView : UserControl
     private void HookViewModel()
     {
         m_loggerTextBox = this.FindControl<TextBox>("LoggerTextBox");
+        m_loggerScrollViewer = m_loggerTextBox?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
 
         if (DataContext is not LoggerViewModel viewModel)
         {
@@ -78,6 +82,11 @@ public partial class LoggerView : UserControl
             }
 
             m_loggerTextBox.CaretIndex = m_loggerTextBox.Text?.Length ?? 0;
+            m_loggerScrollViewer ??= m_loggerTextBox.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (m_loggerScrollViewer is not null)
+            {
+                m_loggerScrollViewer.Offset = new Vector(0, m_loggerScrollViewer.Extent.Height);
+            }
         }, DispatcherPriority.Background);
     }
 

@@ -13,6 +13,7 @@ namespace FrostyEditor;
 public partial class App : Application
 {
     public static string ConfigPath = Path.Combine(AppContext.BaseDirectory, "editor_config.json");
+    public static AppStartupOptions StartupOptions { get; set; } = AppStartupOptions.Empty;
 
     public static MainViewModel? MainViewModel = null;
 

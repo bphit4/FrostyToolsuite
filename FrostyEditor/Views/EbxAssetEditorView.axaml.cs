@@ -25,11 +25,30 @@ public partial class EbxAssetEditorView : UserControl
     private Point m_inspectorGripStart;
     private double m_inspectorColumnStartWidth;
     private InspectorNodeModel? m_contextNode;
+    private ListBox? m_inspectorNameList;
+    private ListBox? m_inspectorValueList;
+    private ScrollViewer? m_nameScrollViewer;
+    private ScrollViewer? m_valueScrollViewer;
+    private bool m_isSyncingScroll;
 
     public EbxAssetEditorView()
     {
         AvaloniaXamlLoader.Load(this);
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         UpdatePropertiesPanelState();
+    }
+
+    private void OnLoaded(object? sender, EventArgs e)
+    {
+        m_inspectorNameList = this.FindControl<ListBox>("InspectorNameList");
+        m_inspectorValueList = this.FindControl<ListBox>("InspectorValueList");
+        Dispatcher.UIThread.Post(InitializeScrollSync, DispatcherPriority.Loaded);
+    }
+
+    private void OnUnloaded(object? sender, EventArgs e)
+    {
+        DetachScrollSync();
     }
 
     private void OnInspectorContextRequested(object? sender, ContextRequestedEventArgs e)
@@ -226,7 +245,7 @@ public partial class EbxAssetEditorView : UserControl
                 node.IsExpanded = shouldExpand;
             }
 
-            RefreshInspectorRows(node);
+            RefreshInspectorRows();
             e.Handled = true;
             return;
         }
@@ -334,7 +353,7 @@ public partial class EbxAssetEditorView : UserControl
                 return;
             }
 
-            CommitEditor(node);
+            CommitEditor(node, editor);
         }
     }
 
@@ -348,7 +367,7 @@ public partial class EbxAssetEditorView : UserControl
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
-            CommitEditor(node);
+            CommitEditor(node, editor);
         }
         else if (e.Key == Key.Escape)
         {
@@ -357,7 +376,7 @@ public partial class EbxAssetEditorView : UserControl
         }
     }
 
-    private static void CommitEditor(InspectorNodeModel node)
+    private void CommitEditor(InspectorNodeModel node, TextBox? editor = null)
     {
         if (node.CommitEdit(out string? error) || string.IsNullOrWhiteSpace(error))
         {
@@ -365,6 +384,21 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         Frosty.Sdk.FrostyLogger.Logger?.LogWarning($"Unable to update {node.Name}: {error}");
+        if (editor is null)
+        {
+            return;
+        }
+
+        int caretIndex = editor.CaretIndex;
+        int selectionStart = editor.SelectionStart;
+        int selectionEnd = editor.SelectionEnd;
+        Dispatcher.UIThread.Post(() =>
+        {
+            editor.Focus();
+            editor.CaretIndex = Math.Clamp(caretIndex, 0, editor.Text?.Length ?? 0);
+            editor.SelectionStart = Math.Clamp(selectionStart, 0, editor.Text?.Length ?? 0);
+            editor.SelectionEnd = Math.Clamp(selectionEnd, 0, editor.Text?.Length ?? 0);
+        }, DispatcherPriority.Input);
     }
 
     private void OnAddCollectionItemClicked(object? sender, RoutedEventArgs e)
@@ -412,9 +446,10 @@ public partial class EbxAssetEditorView : UserControl
             return;
         }
 
+        string? parentNodePath = GetParentNodePath(node.NodePath);
         if (node.RemoveCollectionEntry(out string? error))
         {
-            viewModel.RebuildNodes();
+            RefreshInspectorRows(parentNodePath is not null ? viewModel.FindNodeByPath(parentNodePath) : null);
             return;
         }
 
@@ -560,7 +595,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.ExpandOneLevelProgressive();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnExpandAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -571,7 +606,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.ExpandAllDescendants();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnCollapseOneLevelMenuItemClick(object? sender, RoutedEventArgs e)
@@ -582,7 +617,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.CollapseOneLevelProgressive();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnCollapseAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -593,7 +628,7 @@ public partial class EbxAssetEditorView : UserControl
         }
 
         node.CollapseAllDescendants();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private static bool IsEmbeddedControlInteraction(object? source)
@@ -680,46 +715,157 @@ public partial class EbxAssetEditorView : UserControl
             return;
         }
 
-        PreserveInspectorViewport(() =>
+        if (node is not null)
         {
-            if (node is not null)
-            {
-                viewModel.RefreshNodeSubtree(node);
-                return;
-            }
+            viewModel.RefreshNodeSubtree(node);
+            return;
+        }
 
-            viewModel.RefreshVisibleNodes();
-        });
+        PreserveInspectorViewport(() => viewModel.RefreshVisibleNodes());
+    }
+
+    private static string? GetParentNodePath(string? nodePath)
+    {
+        if (string.IsNullOrWhiteSpace(nodePath))
+        {
+            return null;
+        }
+
+        int separatorIndex = nodePath.LastIndexOf('.');
+        if (separatorIndex <= 0)
+        {
+            return null;
+        }
+
+        return nodePath[..separatorIndex];
     }
 
     private void PreserveInspectorViewport(Action refreshAction)
     {
-        ListBox? inspectorList = this.FindControl<ListBox>("InspectorList");
-        ScrollViewer? scrollViewer = inspectorList?
-            .GetVisualDescendants()
-            .OfType<ScrollViewer>()
-            .FirstOrDefault();
-
-        if (scrollViewer is null)
+        Vector nameOffset = m_nameScrollViewer?.Offset ?? default;
+        Vector valueOffset = m_valueScrollViewer?.Offset ?? default;
+        TextBox? focusedEditor = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as TextBox;
+        string? focusedNodePath = focusedEditor?.DataContext is InspectorNodeModel focusedNode ? focusedNode.NodePath : null;
+        int focusedCaretIndex = focusedEditor?.CaretIndex ?? 0;
+        int focusedSelectionStart = focusedEditor?.SelectionStart ?? 0;
+        int focusedSelectionEnd = focusedEditor?.SelectionEnd ?? 0;
+        if (m_valueScrollViewer is null)
         {
             refreshAction();
             return;
         }
 
-        Vector offset = scrollViewer.Offset;
         refreshAction();
 
         Dispatcher.UIThread.Post(() =>
         {
-            ScrollViewer? refreshedScrollViewer = inspectorList?
-                .GetVisualDescendants()
-                .OfType<ScrollViewer>()
-                .FirstOrDefault();
-            if (refreshedScrollViewer is not null)
+            InitializeScrollSync();
+            m_isSyncingScroll = true;
+            try
             {
-                refreshedScrollViewer.Offset = offset;
+                if (m_nameScrollViewer is not null)
+                {
+                    m_nameScrollViewer.Offset = nameOffset;
+                }
+
+                if (m_valueScrollViewer is not null)
+                {
+                    m_valueScrollViewer.Offset = valueOffset;
+                }
+
+                if (!string.IsNullOrWhiteSpace(focusedNodePath) &&
+                    FindEditorForNodePath(focusedNodePath) is { } refreshedEditor &&
+                    refreshedEditor.DataContext is InspectorNodeModel refreshedNode &&
+                    refreshedNode.IsEditing)
+                {
+                    refreshedEditor.Focus();
+                    int textLength = refreshedEditor.Text?.Length ?? 0;
+                    refreshedEditor.CaretIndex = Math.Clamp(focusedCaretIndex, 0, textLength);
+                    refreshedEditor.SelectionStart = Math.Clamp(focusedSelectionStart, 0, textLength);
+                    refreshedEditor.SelectionEnd = Math.Clamp(focusedSelectionEnd, 0, textLength);
+                }
+            }
+            finally
+            {
+                m_isSyncingScroll = false;
             }
         }, DispatcherPriority.Background);
+    }
+
+    private TextBox? FindEditorForNodePath(string nodePath)
+    {
+        return this.GetVisualDescendants()
+            .OfType<TextBox>()
+            .FirstOrDefault(textBox =>
+                textBox.DataContext is InspectorNodeModel node &&
+                string.Equals(node.NodePath, nodePath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void InitializeScrollSync()
+    {
+        DetachScrollSync();
+        m_nameScrollViewer = m_inspectorNameList?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        m_valueScrollViewer = m_inspectorValueList?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+
+        if (m_nameScrollViewer is not null)
+        {
+            m_nameScrollViewer.ScrollChanged += OnInspectorScrollChanged;
+        }
+
+        if (m_valueScrollViewer is not null)
+        {
+            m_valueScrollViewer.ScrollChanged += OnInspectorScrollChanged;
+        }
+    }
+
+    private void DetachScrollSync()
+    {
+        if (m_nameScrollViewer is not null)
+        {
+            m_nameScrollViewer.ScrollChanged -= OnInspectorScrollChanged;
+        }
+
+        if (m_valueScrollViewer is not null)
+        {
+            m_valueScrollViewer.ScrollChanged -= OnInspectorScrollChanged;
+        }
+
+        m_nameScrollViewer = null;
+        m_valueScrollViewer = null;
+    }
+
+    private void OnInspectorScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (m_isSyncingScroll || e.OffsetDelta.Y == 0)
+        {
+            return;
+        }
+
+        ScrollViewer? source = sender as ScrollViewer;
+        ScrollViewer? target = ReferenceEquals(source, m_nameScrollViewer) ? m_valueScrollViewer
+            : ReferenceEquals(source, m_valueScrollViewer) ? m_nameScrollViewer
+            : null;
+
+        if (source is null || target is null)
+        {
+            return;
+        }
+
+        double targetY = source.Offset.Y;
+        if (Math.Abs(target.Offset.Y - targetY) < 0.5)
+        {
+            return;
+        }
+
+        m_isSyncingScroll = true;
+        try
+        {
+            target.Offset = new Vector(target.Offset.X, targetY);
+        }
+        finally
+        {
+            m_isSyncingScroll = false;
+        }
     }
 
     private void OnPropertiesToggleChanged(object? sender, RoutedEventArgs e)

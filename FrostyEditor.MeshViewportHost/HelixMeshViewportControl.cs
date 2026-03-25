@@ -245,6 +245,7 @@ public sealed class HelixMeshViewportControl : UserControl, IDisposable
                         meshNode.Material = nextMaterial;
                     }
                 }
+
             }
         }
 

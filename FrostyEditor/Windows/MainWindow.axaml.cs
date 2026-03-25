@@ -5,6 +5,8 @@ using Avalonia.Interactivity;
 using Avalonia;
 using Avalonia.Threading;
 using Avalonia.Input;
+using Avalonia.Platform;
+using System.Runtime.InteropServices;
 using FrostyEditor.Utils;
 using FrostyEditor.Views;
 using FrostyEditor.ViewModels;
@@ -13,6 +15,8 @@ namespace FrostyEditor.Windows;
 
 public partial class MainWindow : Window
 {
+    private const int DwmWindowCornerPreferenceAttribute = 33;
+    private const int DwmWindowCornerPreferenceDoNotRound = 1;
     private bool m_applyingSettings;
     private bool m_shellAttached;
     private bool m_allowClose;
@@ -20,7 +24,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://FrostyEditor/Assets/FrostyApp.ico")));
         Opened += OnOpened;
+        Opened += (_, _) => DisableRoundedCorners();
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
     }
@@ -40,6 +46,11 @@ public partial class MainWindow : Window
 
         WindowState = WindowState.Maximized;
         Config.Save(App.ConfigPath);
+    }
+
+    public void AllowProgrammaticClose()
+    {
+        m_allowClose = true;
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -223,4 +234,24 @@ public partial class MainWindow : Window
                 break;
         }
     }
+
+    private void DisableRoundedCorners()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        IPlatformHandle? handle = TryGetPlatformHandle();
+        if (handle is null)
+        {
+            return;
+        }
+
+        int preference = DwmWindowCornerPreferenceDoNotRound;
+        DwmSetWindowAttribute(handle.Handle, DwmWindowCornerPreferenceAttribute, ref preference, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int attributeValue, int attributeSize);
 }

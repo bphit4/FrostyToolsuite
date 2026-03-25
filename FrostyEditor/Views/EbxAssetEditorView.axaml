@@ -33,15 +33,29 @@
             <MenuItem Header="Find In Data Explorer" Tag="find-asset" Click="OnFindReferenceAssetMenuItemClick" IsVisible="False"/>
           </MenuFlyout>
         </Grid.ContextFlyout>
-        <Border Background="Transparent"
-                Padding="3,0"
-                Height="18">
-          <Grid ColumnDefinitions="*">
-            <TextBlock Grid.Column="0"
+      <Border Background="Transparent"
+              Padding="2,0,6,0"
+              Height="22"
+              ClipToBounds="True">
+        <Grid ColumnDefinitions="16,*"
+              Margin="{Binding FlatNameIndent}">
+          <Path Grid.Column="0"
+                Width="6"
+                Height="6"
+                Fill="#DADADA"
+                Stretch="Uniform"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Data="{Binding ExpandGlyphData}"
+                  IsVisible="{Binding ShowExpandGlyph}"/>
+            <TextBlock Grid.Column="1"
                        VerticalAlignment="Center"
-                       FontSize="10"
-                       LineHeight="12"
+                       Foreground="#F2F2F2"
+                       FontFamily="Global User Interface"
+                       FontSize="11"
+                       LineHeight="14"
                        FontWeight="{Binding NameFontWeight}"
+                       ClipToBounds="True"
                        TextWrapping="NoWrap">
               <Run Text="{Binding Name}"/>
               <Run Text="{Binding NameSuffix}"/>
@@ -124,6 +138,7 @@
                            VerticalAlignment="Center"/>
                 <TextBlock Classes="inspector-value-text"
                            Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                           Foreground="#A7A7A7"
                            IsVisible="{Binding ShowPointerDisplayPath}"
                            VerticalAlignment="Center"/>
               </StackPanel>
@@ -156,43 +171,49 @@
                      KeyDown="OnInspectorEditorKeyDown"/>
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
-                        Spacing="2"
-                        Margin="6,0,0,0"
+                        Spacing="4"
+                        Margin="6,0,2,0"
                         VerticalAlignment="Center"
                         IsVisible="{Binding ShowRowActions}">
-              <Button Classes="toolbar"
-                      Content="X"
-                      Width="18"
-                      Height="18"
+              <Button Classes="inspector-action-button"
+                      Width="17"
+                      Height="17"
                       Padding="0"
-                      FontSize="10"
                       HorizontalContentAlignment="Center"
                       VerticalContentAlignment="Center"
                       IsVisible="{Binding CanClearCollectionItems}"
-                      Click="OnClearCollectionItemsClicked"/>
-              <Button Classes="toolbar"
-                      Content="X"
-                      Width="18"
-                      Height="18"
+                      Click="OnClearCollectionItemsClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Remove.png"
+                       Width="14"
+                       Height="14"/>
+              </Button>
+              <Button Classes="inspector-action-button"
+                      Width="17"
+                      Height="17"
                       Padding="0"
-                      FontSize="10"
                       HorizontalContentAlignment="Center"
                       VerticalContentAlignment="Center"
                       IsVisible="{Binding CanRemoveCollectionEntry}"
-                      Click="OnRemoveCollectionEntryClicked"/>
-              <Button Classes="toolbar"
-                      Content="+"
-                      Width="18"
-                      Height="18"
+                      Click="OnRemoveCollectionEntryClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Remove.png"
+                       Width="14"
+                       Height="14"/>
+              </Button>
+              <Button Classes="inspector-action-button"
+                      Width="17"
+                      Height="17"
                       Padding="0"
-                      FontSize="10"
                       HorizontalContentAlignment="Center"
                       VerticalContentAlignment="Center"
                       IsVisible="{Binding CanAddCollectionItem}"
-                      Click="OnAddCollectionItemClicked"/>
-              <Button Classes="toolbar"
-                      Width="22"
-                      Height="18"
+                      Click="OnAddCollectionItemClicked">
+                <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Add.png"
+                       Width="14"
+                       Height="14"/>
+              </Button>
+              <Button Classes="inspector-action-button"
+                      Width="17"
+                      Height="17"
                       Padding="0"
                       HorizontalContentAlignment="Center"
                       VerticalContentAlignment="Center"
@@ -261,7 +282,7 @@
           </Border>
           <Border Grid.Column="1"
                   Background="Transparent"
-                  Padding="6,0,10,0"
+                  Padding="6,0,16,0"
                   Height="22"
                   ClipToBounds="False">
             <Grid ColumnDefinitions="*,Auto">
@@ -310,6 +331,7 @@
                                        VerticalAlignment="Center"/>
                   <SelectableTextBlock Classes="inspector-value-text"
                                        Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                       Foreground="#A7A7A7"
                                        IsVisible="{Binding ShowPointerDisplayPath}"
                                        VerticalAlignment="Center"/>
                 </StackPanel>
@@ -342,49 +364,49 @@
                        KeyDown="OnInspectorEditorKeyDown"/>
               <StackPanel Grid.Column="1"
                           Orientation="Horizontal"
-                          Spacing="2"
-                          Margin="8,0,2,0"
+                          Spacing="4"
+                          Margin="8,0,4,0"
                           VerticalAlignment="Center"
                           IsVisible="{Binding ShowRowActions}">
-                <Button Classes="toolbar"
-                        Content="X"
-                        Width="18"
-                        Height="18"
+                <Button Classes="inspector-action-button"
+                        Width="17"
+                        Height="17"
                         Padding="0"
-                        FontSize="10"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
                         IsVisible="{Binding CanClearCollectionItems}"
-                        Click="OnClearCollectionItemsClicked"/>
-                <Button Classes="toolbar"
-                        Content="X"
-                        Width="18"
-                        Height="18"
+                        Click="OnClearCollectionItemsClicked">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Remove.png"
+                         Width="14"
+                         Height="14"/>
+                </Button>
+                <Button Classes="inspector-action-button"
+                        Width="17"
+                        Height="17"
                         Padding="0"
-                        FontSize="10"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
                         IsVisible="{Binding CanRemoveCollectionEntry}"
-                        Click="OnRemoveCollectionEntryClicked"/>
-                <Button Classes="toolbar"
-                        Width="18"
-                        Height="18"
+                        Click="OnRemoveCollectionEntryClicked">
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Remove.png"
+                         Width="14"
+                         Height="14"/>
+                </Button>
+                <Button Classes="inspector-action-button"
+                        Width="17"
+                        Height="17"
                         Padding="0"
-                        FontSize="13"
-                        FontWeight="Bold"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
                         IsVisible="{Binding CanAddCollectionItem}"
                         Click="OnAddCollectionItemClicked">
-                  <TextBlock Text="+"
-                             FontSize="13"
-                             FontWeight="Bold"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Center"/>
+                  <Image Source="avares://FrostyEditor/Assets/Legacy/FrostyEditorImages/Add.png"
+                         Width="14"
+                         Height="14"/>
                 </Button>
-                <Button Classes="toolbar"
-                        Width="22"
-                        Height="18"
+                <Button Classes="inspector-action-button"
+                        Width="17"
+                        Height="17"
                         Padding="0"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
@@ -403,7 +425,7 @@
   </UserControl.Resources>
   <UserControl.Styles>
     <Style Selector="ListBox.inspector-name-list">
-      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="Background" Value="#24242A"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="0"/>
     </Style>
@@ -427,9 +449,9 @@
       <Setter Property="Background" Value="#303030"/>
     </Style>
     <Style Selector="ListBox.inspector-list">
-      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Padding" Value="0,0,14,14"/>
     </Style>
     <Style Selector="ListBox.inspector-list ScrollViewer">
       <Setter Property="AllowAutoHide" Value="False"/>
@@ -521,9 +543,19 @@
       <Setter Property="BorderBrush" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="0"/>
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
       <Setter Property="MinWidth" Value="0"/>
       <Setter Property="MinHeight" Value="16"/>
       <Setter Property="MaxHeight" Value="16"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.inspector-value-text">
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="TextBlock.inspector-value-text">
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
     </Style>
     <Style Selector="TextBox.inspector-editor ScrollViewer">
       <Setter Property="AllowAutoHide" Value="True"/>
@@ -536,6 +568,17 @@
     </Style>
     <Style Selector="TextBox.inspector-editor:focus">
       <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.inspector-action-button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Button.inspector-action-button:pointerover">
+      <Setter Property="Background" Value="#202025"/>
       <Setter Property="BorderBrush" Value="Transparent"/>
     </Style>
   </UserControl.Styles>
@@ -560,7 +603,7 @@
                  Text="{Binding FilterText}"/>
         <Grid Grid.Row="1" ColumnDefinitions="Auto,8,*" Margin="0,0,0,4" ClipToBounds="True">
           <Border Width="{Binding InspectorNameColumnWidth}"
-                  Background="#363636"/>
+                  Background="#24242A"/>
           <Border Grid.Column="1"
                   x:Name="InspectorColumnGrip"
                   Background="Transparent"
@@ -570,16 +613,27 @@
                   PointerReleased="OnInspectorGripReleased"
                   ZIndex="10">
             <Border Width="1"
-                    Background="#35353A"
+                    Background="#3A3A40"
                     HorizontalAlignment="Center"/>
           </Border>
           <Border Grid.Column="2"
-                  Background="#292929"/>
-          <ListBox x:Name="InspectorList"
-                   Grid.ColumnSpan="3"
+                  Background="#17181B"/>
+          <ListBox x:Name="InspectorNameList"
+                   Grid.Column="0"
+                   Classes="inspector-name-list"
+                   Width="{Binding InspectorNameColumnWidth}"
+                   ItemsSource="{Binding VisibleNodes}"
+                   ItemTemplate="{StaticResource InspectorNameTemplate}"
+                   ScrollViewer.AllowAutoHide="True"
+                   ScrollViewer.IsScrollInertiaEnabled="False"
+                   ScrollViewer.IsScrollChainingEnabled="False"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+          <ListBox x:Name="InspectorValueList"
+                   Grid.Column="2"
                    Classes="inspector-list"
                    ItemsSource="{Binding VisibleNodes}"
-                   ItemTemplate="{StaticResource InspectorRowTemplate}"
+                   ItemTemplate="{StaticResource InspectorValueTemplate}"
                    ScrollViewer.AllowAutoHide="True"
                    ScrollViewer.IsScrollInertiaEnabled="False"
                    ScrollViewer.IsScrollChainingEnabled="False"

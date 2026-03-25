@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -15,6 +17,7 @@ public partial class DataExplorerView : UserControl
 {
     private const double DefaultFolderPaneRatio = 2.25;
     private const double DefaultAssetPaneRatio = 1.0;
+    public event EventHandler? ToggleDockRequested;
 
     public DataExplorerView()
     {
@@ -89,7 +92,7 @@ public partial class DataExplorerView : UserControl
 
         if (DataContext is DataExplorerViewModel viewModel)
         {
-            viewModel.HandleFolderDoubleTapped(FindFolderNode(e.Source));
+            viewModel.HandleFolderDoubleTapped(FindFolderNode(e.Source), e.KeyModifiers);
         }
     }
 
@@ -102,7 +105,7 @@ public partial class DataExplorerView : UserControl
 
         if (DataContext is DataExplorerViewModel viewModel)
         {
-            viewModel.HandleFolderTapped(FindFolderNode(e.Source));
+            viewModel.HandleFolderTapped(FindFolderNode(e.Source), e.KeyModifiers);
         }
     }
 
@@ -130,7 +133,10 @@ public partial class DataExplorerView : UserControl
             return;
         }
 
-        viewModel.HandleAssetTapped(FindAssetNode(e.Source));
+        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            viewModel.SelectAssetFromPointer(FindAssetNode(e.Source));
+        }
     }
 
     private void LegacyFolderTree_OnDoubleTapped(object? sender, TappedEventArgs e)
@@ -192,6 +198,36 @@ public partial class DataExplorerView : UserControl
     private void LegacyTypeFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
     {
         OpenTypeComboIfNeeded(sender as TextBox, "LegacyTypeCombo");
+    }
+
+    private void OnToggleDockClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ToggleDockRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void TypeCombo_OnDropDownOpened(object? sender, EventArgs e)
+    {
+        if (sender is not ComboBox combo)
+        {
+            return;
+        }
+
+        string rowName = combo.Name == "LegacyTypeCombo" ? "LegacyTypeFilterRow" : "DataTypeFilterRow";
+        Grid? row = this.FindControl<Grid>(rowName);
+        if (row is null)
+        {
+            return;
+        }
+
+        Popup? popup = combo.GetVisualDescendants().OfType<Popup>().FirstOrDefault();
+        if (popup is null)
+        {
+            return;
+        }
+
+        popup.Placement = PlacementMode.BottomEdgeAlignedLeft;
+        popup.HorizontalOffset = 0;
+        popup.Width = Math.Max(combo.Bounds.Width, row.Bounds.Width);
     }
 
     private static bool IsExpanderInteraction(object? source)

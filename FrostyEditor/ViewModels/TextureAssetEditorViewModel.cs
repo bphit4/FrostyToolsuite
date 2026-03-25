@@ -46,7 +46,7 @@ public partial class TextureAssetEditorViewModel : AssetEditorViewModel, ISessio
     private int m_selectedSliceLevel;
 
     [ObservableProperty]
-    private TextureChannelMask m_channels = TextureChannelMask.Rgba;
+    private TextureChannelMask m_channels = TextureChannelMask.Red | TextureChannelMask.Green | TextureChannelMask.Blue;
 
     [ObservableProperty]
     private bool m_showLuminance;

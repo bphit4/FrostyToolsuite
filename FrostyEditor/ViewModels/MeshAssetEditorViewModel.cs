@@ -167,9 +167,8 @@ public sealed partial class MeshAssetEditorViewModel : AssetEditorViewModel, ISe
     public string DataStatus => Mesh.ParsedSuccessfully ? "Parsed" : "Partial";
     public bool HasParseWarning => !Mesh.ParsedSuccessfully;
     public bool CanRevert => IsModified;
-    public bool ShowGpuViewport =>
-        SelectedRenderMode is MeshViewportRenderMode.Lit or MeshViewportRenderMode.Base or MeshViewportRenderMode.Wireframe;
-    public bool ShowSoftwarePreview => !ShowGpuViewport;
+    public bool ShowGpuViewport => true;
+    public bool ShowSoftwarePreview => false;
     public bool HasPreviewBitmap => PreviewBitmap is not null;
     public int ViewportSceneRevision => m_viewportSceneRevision;
     public int ViewportSettingsRevision => m_viewportSettingsRevision;

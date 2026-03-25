@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.Models.TreeDataGrid;
 using Avalonia.Controls.Selection;
+using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -34,8 +36,11 @@ public partial class DataExplorerViewModel : ViewModelBase
     private FolderTreeNodeModel m_root;
     private FolderTreeNodeModel m_filteredRoot;
     private IReadOnlyList<AssetModel> m_currentAssets = Array.Empty<AssetModel>();
+    private IReadOnlyList<AssetModel> m_visibleAssets = Array.Empty<AssetModel>();
     private FolderTreeNodeModel? m_selectedFolderNode;
+    private IReadOnlyList<FolderTreeNodeModel> m_selectedFolderNodes = Array.Empty<FolderTreeNodeModel>();
     private AssetModel? m_selectedAsset;
+    private IReadOnlyList<AssetModel> m_selectedAssets = Array.Empty<AssetModel>();
     private CancellationTokenSource? m_filterCts;
     private readonly List<string> m_allAssetTypes = ["All"];
     private DateTime m_lastFolderTapUtc = DateTime.MinValue;
@@ -43,6 +48,9 @@ public partial class DataExplorerViewModel : ViewModelBase
     private bool m_suppressAssetTypeSearchSync;
     private Task? m_initialLoadTask;
     private int m_initialLoadStarted;
+    private int m_selectedFolderSelectionCount;
+    private bool m_restoringFolderSelection;
+    private bool m_restoringAssetSelection;
 
     [ObservableProperty]
     private HierarchicalTreeDataGridSource<FolderTreeNodeModel> m_folderSource;
@@ -87,10 +95,25 @@ public partial class DataExplorerViewModel : ViewModelBase
     private int m_totalAssetCount;
 
     [ObservableProperty]
+    private int m_selectedFolderAssetCount;
+
+    [ObservableProperty]
+    private int m_selectedFolderCount;
+
+    [ObservableProperty]
+    private string m_folderHeaderSummaryLabel = "Folders 0   Assets 0";
+
+    [ObservableProperty]
     private string m_selectedAssetCountLabel = "0 Assets";
 
     [ObservableProperty]
     private string m_selectedAssetTypeFilter = "All";
+
+    [ObservableProperty]
+    private string m_selectedAssetTypeFilterDisplay = "Type: All";
+
+    [ObservableProperty]
+    private double m_assetTypeComboMinWidth = 220;
 
     [ObservableProperty]
     private string m_assetTypeSearchText = string.Empty;
@@ -146,6 +169,7 @@ public partial class DataExplorerViewModel : ViewModelBase
                     })
             }
         };
+        AssetsSource.RowSelection!.SingleSelect = false;
         AssetsSource.RowSelection!.SelectionChanged += OnAssetSelectionChanged;
 
         FolderContextMenu = new MenuFlyout()
@@ -187,10 +211,7 @@ public partial class DataExplorerViewModel : ViewModelBase
 
         FolderCount = 0;
         TotalAssetCount = 0;
-        m_selectedFolderNode = m_filteredRoot;
-        SelectedFolderName = m_filteredRoot.Name;
-        m_currentAssets = m_filteredRoot.GetSortedAssets();
-        RefreshAssetList();
+        ApplyFolderSelectionSnapshot(Array.Empty<FolderTreeNodeModel>(), m_filteredRoot);
         _ = EnsureLoadedAsync();
     }
 
@@ -228,6 +249,8 @@ public partial class DataExplorerViewModel : ViewModelBase
 
     private void ApplyInitialTree(FolderTreeNodeModel root, int folderCount, int assetCount, IReadOnlyList<string> assetTypes)
     {
+        IReadOnlyList<string> selectedFolderPaths = CaptureSelectedFolderPaths();
+
         m_root = root;
         FolderCount = folderCount;
         TotalAssetCount = assetCount;
@@ -246,11 +269,8 @@ public partial class DataExplorerViewModel : ViewModelBase
         m_filteredRoot = IsFilterActive()
             ? FolderTreeNodeModel.CreateFiltered(m_root, BuildAssetPredicate())
             : m_root;
-        m_selectedFolderNode = m_filteredRoot;
-        SelectedFolderName = m_filteredRoot.Name;
         FolderSource = CreateFolderSource(m_filteredRoot);
-        m_currentAssets = m_filteredRoot.GetSortedAssets();
-        RefreshAssetList();
+        RestoreFolderSelection(selectedFolderPaths);
     }
 
     partial void OnSelectedExplorerTabIndexChanged(int value)
@@ -264,19 +284,52 @@ public partial class DataExplorerViewModel : ViewModelBase
         }
     }
 
+    partial void OnFolderCountChanged(int value)
+    {
+        UpdateFolderHeaderSummary();
+    }
+
     partial void OnAssetCountChanged(int value)
     {
         SelectedAssetCountLabel = $"{value} Assets";
     }
 
+    partial void OnTotalAssetCountChanged(int value)
+    {
+        UpdateFolderHeaderSummary();
+    }
+
+    partial void OnSelectedFolderAssetCountChanged(int value)
+    {
+        UpdateFolderHeaderSummary();
+    }
+
+    partial void OnSelectedFolderCountChanged(int value)
+    {
+        UpdateFolderHeaderSummary();
+    }
+
+    partial void OnFolderHeaderSummaryLabelChanged(string value)
+    {
+        OnPropertyChanged(nameof(FolderHeaderSummaryLabel));
+    }
+
     [RelayCommand]
     private async Task ExportAsset()
     {
-        if (m_selectedAsset?.Entry is not EbxAssetEntry entry)
+        IReadOnlyList<EbxAssetEntry> entries = GetSelectedEbxEntries();
+        if (entries.Count == 0)
         {
             return;
         }
 
+        if (entries.Count > 1)
+        {
+            FrostyLogger.Logger?.LogWarning("Multi-asset export is not wired yet. Select a single asset to export.");
+            return;
+        }
+
+        EbxAssetEntry entry = entries[0];
         if (TextureAssetOperations.IsTextureAsset(entry))
         {
             TextureOperationResult result = await TextureAssetOperations.ExportWithPickerAsync(entry);
@@ -339,39 +392,51 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private async Task OpenAsset()
     {
-        if (m_selectedAsset?.Entry is not EbxAssetEntry entry)
+        IReadOnlyList<EbxAssetEntry> entries = GetSelectedEbxEntries();
+        if (entries.Count == 0)
         {
             return;
         }
 
-        AssetEditorViewModel desiredEditor = PluginManager.GetEbxAssetEditor(entry);
-        string documentKey = AssetEditorViewModel.CreateDocumentKey(entry);
-        DocumentModel? existing = App.MainViewModel?.GetDocumentByKey(documentKey);
-        if (existing is not null)
+        foreach (EbxAssetEntry entry in entries)
         {
-            if (existing.Content?.GetType() == desiredEditor.GetType())
+            AssetEditorViewModel desiredEditor = PluginManager.GetEbxAssetEditor(entry);
+            string documentKey = AssetEditorViewModel.CreateDocumentKey(entry);
+            DocumentModel? existing = App.MainViewModel?.GetDocumentByKey(documentKey);
+            if (existing is not null)
             {
-                App.MainViewModel?.ActivateDocumentByKey(documentKey);
-                return;
+                if (existing.Content?.GetType() == desiredEditor.GetType())
+                {
+                    App.MainViewModel?.ActivateDocumentByKey(documentKey);
+                    continue;
+                }
+
+                if (!await App.MainViewModel!.CloseDocumentAsync(existing))
+                {
+                    return;
+                }
             }
 
-            if (!await App.MainViewModel!.CloseDocumentAsync(existing))
-            {
-                return;
-            }
+            App.MainViewModel?.AddEditor(desiredEditor);
         }
-
-        App.MainViewModel?.AddEditor(desiredEditor);
     }
 
     [RelayCommand]
     private async Task ImportAsset()
     {
-        if (m_selectedAsset?.Entry is not EbxAssetEntry entry)
+        IReadOnlyList<EbxAssetEntry> entries = GetSelectedEbxEntries();
+        if (entries.Count == 0)
         {
             return;
         }
 
+        if (entries.Count > 1)
+        {
+            FrostyLogger.Logger?.LogWarning("Multi-asset import is not wired yet. Select a single asset to import.");
+            return;
+        }
+
+        EbxAssetEntry entry = entries[0];
         if (TextureAssetOperations.IsTextureAsset(entry))
         {
             TextureOperationResult result = await TextureAssetOperations.ImportWithPickerAsync(entry);
@@ -420,53 +485,62 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private Task RevertAsset()
     {
-        if (m_selectedAsset?.Entry is not EbxAssetEntry entry)
+        IReadOnlyList<EbxAssetEntry> entries = GetSelectedEbxEntries();
+        if (entries.Count == 0)
         {
             return Task.CompletedTask;
         }
 
-        if (TextureAssetOperations.IsTextureAsset(entry))
-        {
-            TextureOperationResult result = TextureAssetOperations.Revert(entry);
-            LogTextureOperationResult(result);
+        return RevertSelectedAssetsAsync(entries);
+    }
 
-            if (!result.Success)
+    private async Task RevertSelectedAssetsAsync(IReadOnlyList<EbxAssetEntry> entries)
+    {
+        foreach (EbxAssetEntry entry in entries)
+        {
+            if (TextureAssetOperations.IsTextureAsset(entry))
             {
-                return Task.CompletedTask;
+                TextureOperationResult result = TextureAssetOperations.Revert(entry);
+                LogTextureOperationResult(result);
+                if (!result.Success)
+                {
+                    continue;
+                }
             }
-        }
-        else if (MeshAssetOperations.IsMeshAsset(entry))
-        {
-            MeshOperationResult result = MeshAssetOperations.Revert(entry);
-            LogMeshOperationResult(result);
-            if (!result.Success)
+            else if (MeshAssetOperations.IsMeshAsset(entry))
             {
-                return Task.CompletedTask;
+                MeshOperationResult result = MeshAssetOperations.Revert(entry);
+                LogMeshOperationResult(result);
+                if (!result.Success)
+                {
+                    continue;
+                }
             }
-        }
-        else if (SoundAssetEditorViewModel.IsSoundAsset(entry))
-        {
-            return RevertSoundAssetAsync(entry);
-        }
-        else
-        {
-            bool reverted = AssetManager.RevertEbx(entry.Name);
-            if (!reverted)
+            else if (SoundAssetEditorViewModel.IsSoundAsset(entry))
             {
-                FrostyLogger.Logger?.LogWarning($"{entry.Filename} has no pending EBX edits to revert.");
-                return Task.CompletedTask;
+                await RevertSoundAssetAsync(entry);
+                continue;
+            }
+            else
+            {
+                bool reverted = AssetManager.RevertEbx(entry.Name);
+                if (!reverted)
+                {
+                    FrostyLogger.Logger?.LogWarning($"{entry.Filename} has no pending EBX edits to revert.");
+                    continue;
+                }
+
+                AssetEditStateTracker.ClearAsset(entry.Name);
+                InspectorEditStateTracker.ClearAsset(entry.Name);
+                FrostyLogger.Logger?.LogInfo($"Reverted {entry.Filename} to the original game data.");
             }
 
-            AssetEditStateTracker.ClearAsset(entry.Name);
-            InspectorEditStateTracker.ClearAsset(entry.Name);
-            FrostyLogger.Logger?.LogInfo($"Reverted {entry.Filename} to the original game data.");
+            App.MainViewModel?.RefreshDocumentByKey(AssetEditorViewModel.CreateDocumentKey(entry));
         }
 
-        App.MainViewModel?.RefreshDocumentByKey(AssetEditorViewModel.CreateDocumentKey(entry));
         UpdateAssetContextMenuVisibility();
         RefreshAssetList();
         UpdateSelectedAssetDetails(m_selectedAsset);
-        return Task.CompletedTask;
     }
 
     private async Task RevertSoundAssetAsync(EbxAssetEntry entry)
@@ -487,7 +561,9 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private async Task CopySelectedFolderPath()
     {
-        string? folderPath = GetFolderPathText(m_selectedFolderNode);
+        string folderPath = string.Join(Environment.NewLine, GetSelectedFolderActionNodes()
+            .Select(GetFolderPathText)
+            .Where(path => !string.IsNullOrWhiteSpace(path))!);
         if (string.IsNullOrWhiteSpace(folderPath))
         {
             return;
@@ -502,7 +578,9 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private async Task CopySelectedAssetName()
     {
-        string? assetName = m_selectedAsset?.Entry?.Filename;
+        string assetName = string.Join(Environment.NewLine, GetSelectedAssets()
+            .Select(asset => asset.Entry?.Filename)
+            .Where(name => !string.IsNullOrWhiteSpace(name))!);
         if (string.IsNullOrWhiteSpace(assetName))
         {
             return;
@@ -517,7 +595,9 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private async Task CopySelectedAssetPath()
     {
-        string? assetPath = GetAssetPathText(m_selectedAsset);
+        string assetPath = string.Join(Environment.NewLine, GetSelectedAssets()
+            .Select(GetAssetPathText)
+            .Where(path => !string.IsNullOrWhiteSpace(path))!);
         if (string.IsNullOrWhiteSpace(assetPath))
         {
             return;
@@ -532,25 +612,26 @@ public partial class DataExplorerViewModel : ViewModelBase
     [RelayCommand]
     private void ExpandSelectedFolder()
     {
-        if (m_selectedFolderNode is not null)
+        foreach (FolderTreeNodeModel folder in GetSelectedFolderActionNodes())
         {
-            m_selectedFolderNode.IsExpanded = true;
+            folder.IsExpanded = true;
         }
     }
 
     [RelayCommand]
     private void CollapseSelectedFolder()
     {
-        if (m_selectedFolderNode is not null)
+        foreach (FolderTreeNodeModel folder in GetSelectedFolderActionNodes())
         {
-            m_selectedFolderNode.IsExpanded = false;
+            folder.IsExpanded = false;
         }
     }
 
     [RelayCommand]
     private void RevertSelectedFolder()
     {
-        if (m_selectedFolderNode is null)
+        IReadOnlyList<FolderTreeNodeModel> folders = GetSelectedFolderActionNodes();
+        if (folders.Count == 0)
         {
             FrostyLogger.Logger?.LogWarning("No folder is selected to revert.");
             return;
@@ -561,69 +642,72 @@ public partial class DataExplorerViewModel : ViewModelBase
         int failed = 0;
         HashSet<string> refreshedDocumentKeys = [];
 
-        foreach (AssetModel asset in EnumerateAssets(m_selectedFolderNode))
+        foreach (FolderTreeNodeModel folder in folders)
         {
-            if (asset.Entry is not EbxAssetEntry entry)
+            foreach (AssetModel asset in EnumerateAssets(folder))
             {
-                continue;
-            }
-
-            bool isSoundAsset = SoundAssetEditorViewModel.IsSoundAsset(entry);
-            bool isModified = isSoundAsset
-                ? SoundAssetOperations.IsModified(entry)
-                : AssetEditStateTracker.IsModified(entry.Name);
-
-            if (!isModified)
-            {
-                continue;
-            }
-
-            bool success;
-            if (TextureAssetOperations.IsTextureAsset(entry))
-            {
-                TextureOperationResult result = TextureAssetOperations.Revert(entry);
-                success = result.Success;
-                if (!success)
+                if (asset.Entry is not EbxAssetEntry entry)
                 {
-                    FrostyLogger.Logger?.LogWarning(result.Message);
+                    continue;
                 }
-            }
-            else if (MeshAssetOperations.IsMeshAsset(entry))
-            {
-                MeshOperationResult result = MeshAssetOperations.Revert(entry);
-                success = result.Success;
-                if (!success)
+
+                bool isSoundAsset = SoundAssetEditorViewModel.IsSoundAsset(entry);
+                bool isModified = isSoundAsset
+                    ? SoundAssetOperations.IsModified(entry)
+                    : AssetEditStateTracker.IsModified(entry.Name);
+
+                if (!isModified)
                 {
-                    FrostyLogger.Logger?.LogWarning(result.Message);
+                    continue;
                 }
-            }
-            else if (isSoundAsset)
-            {
-                SoundOperationResult result = SoundAssetOperations.Revert(entry);
-                success = result.Success;
-                if (!success)
+
+                bool success;
+                if (TextureAssetOperations.IsTextureAsset(entry))
                 {
-                    FrostyLogger.Logger?.LogWarning(result.Message);
+                    TextureOperationResult result = TextureAssetOperations.Revert(entry);
+                    success = result.Success;
+                    if (!success)
+                    {
+                        FrostyLogger.Logger?.LogWarning(result.Message);
+                    }
                 }
-            }
-            else
-            {
-                success = AssetManager.RevertEbx(entry.Name);
+                else if (MeshAssetOperations.IsMeshAsset(entry))
+                {
+                    MeshOperationResult result = MeshAssetOperations.Revert(entry);
+                    success = result.Success;
+                    if (!success)
+                    {
+                        FrostyLogger.Logger?.LogWarning(result.Message);
+                    }
+                }
+                else if (isSoundAsset)
+                {
+                    SoundOperationResult result = SoundAssetOperations.Revert(entry);
+                    success = result.Success;
+                    if (!success)
+                    {
+                        FrostyLogger.Logger?.LogWarning(result.Message);
+                    }
+                }
+                else
+                {
+                    success = AssetManager.RevertEbx(entry.Name);
+                    if (success)
+                    {
+                        AssetEditStateTracker.ClearAsset(entry.Name);
+                        InspectorEditStateTracker.ClearAsset(entry.Name);
+                    }
+                }
+
                 if (success)
                 {
-                    AssetEditStateTracker.ClearAsset(entry.Name);
-                    InspectorEditStateTracker.ClearAsset(entry.Name);
+                    reverted++;
+                    refreshedDocumentKeys.Add(AssetEditorViewModel.CreateDocumentKey(entry));
                 }
-            }
-
-            if (success)
-            {
-                reverted++;
-                refreshedDocumentKeys.Add(AssetEditorViewModel.CreateDocumentKey(entry));
-            }
-            else
-            {
-                failed++;
+                else
+                {
+                    failed++;
+                }
             }
         }
 
@@ -638,12 +722,12 @@ public partial class DataExplorerViewModel : ViewModelBase
 
         if (reverted == 0 && skipped == 0 && failed == 0)
         {
-            FrostyLogger.Logger?.LogInfo($"No modified assets were found under folder '{m_selectedFolderNode.Name}'.");
+            FrostyLogger.Logger?.LogInfo("No modified assets were found under the selected folder selection.");
             return;
         }
 
         FrostyLogger.Logger?.LogInfo(
-            $"Folder revert finished for '{m_selectedFolderNode.Name}': reverted {reverted}, skipped {skipped}, failed {failed}.");
+            $"Folder revert finished for {folders.Count.ToString("N0", CultureInfo.CurrentCulture)} selected folder(s): reverted {reverted}, skipped {skipped}, failed {failed}.");
     }
 
     partial void OnFilterTextChanged(string value)
@@ -653,6 +737,8 @@ public partial class DataExplorerViewModel : ViewModelBase
 
     partial void OnSelectedAssetTypeFilterChanged(string value)
     {
+        SelectedAssetTypeFilterDisplay = $"Type: {value}";
+
         if (!m_suppressAssetTypeSearchSync)
         {
             AssetTypeSearchText = string.Equals(value, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : value;
@@ -683,57 +769,48 @@ public partial class DataExplorerViewModel : ViewModelBase
 
     private void OnSelectionChanged(object? sender, TreeSelectionModelSelectionChangedEventArgs<FolderTreeNodeModel> e)
     {
-        FolderTreeNodeModel? folder = e.SelectedItems.Count > 0 ? e.SelectedItems[0] : null;
-        if (folder is null)
+        if (m_restoringFolderSelection)
         {
             return;
         }
 
-        m_selectedFolderNode = folder;
-        SelectedFolderName = folder.Name;
-        m_currentAssets = folder.GetSortedAssets();
-        RefreshAssetList();
+        SyncFolderSelectionFromSource();
     }
 
     private void OnAssetSelectionChanged(object? sender, TreeSelectionModelSelectionChangedEventArgs<AssetModel> e)
     {
-        AssetModel? asset = e.SelectedItems.Count > 0 ? e.SelectedItems[0] : null;
-        if (asset?.Entry is null)
+        if (m_restoringAssetSelection)
         {
-            m_selectedAsset = null;
-            UpdateSelectedAssetDetails(null);
-            UpdateAssetContextMenuVisibility();
-            OnPropertyChanged(nameof(SelectedAssetEntry));
-            OnPropertyChanged(nameof(SelectedEbxAssetEntry));
             return;
         }
 
-        m_selectedAsset = asset;
-        UpdateSelectedAssetDetails(asset);
-        UpdateAssetContextMenuVisibility();
-        OnPropertyChanged(nameof(SelectedAssetEntry));
-        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
+        SyncAssetSelectionFromSource();
     }
 
-    public void HandleFolderDoubleTapped(FolderTreeNodeModel? clickedNode)
+    public void HandleFolderDoubleTapped(FolderTreeNodeModel? clickedNode, KeyModifiers modifiers)
     {
         if (clickedNode is null)
         {
             return;
         }
 
-        SelectFolder(clickedNode);
+        SyncFolderSelectionFromSource();
         clickedNode.IsExpanded = !clickedNode.IsExpanded;
     }
 
-    public void HandleFolderTapped(FolderTreeNodeModel? clickedNode)
+    public void HandleFolderTapped(FolderTreeNodeModel? clickedNode, KeyModifiers modifiers)
     {
         if (clickedNode is null)
         {
             return;
         }
 
-        SelectFolder(clickedNode);
+        SyncFolderSelectionFromSource();
+
+        if ((modifiers & (KeyModifiers.Control | KeyModifiers.Shift)) != 0 || m_selectedFolderSelectionCount > 1)
+        {
+            return;
+        }
 
         DateTime now = DateTime.UtcNow;
         if ((now - m_lastFolderTapUtc).TotalMilliseconds < 250)
@@ -757,7 +834,13 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
-        SelectFolder(clickedNode);
+        if (GetSelectedFolderNodesFromSource().Any(node => ReferenceEquals(node, clickedNode)))
+        {
+            SyncFolderSelectionFromSource();
+            return;
+        }
+
+        SelectFolders([clickedNode], clickedNode);
     }
 
     public void HandleAssetDoubleTapped()
@@ -775,11 +858,23 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
-        m_selectedAsset = clickedAsset;
-        UpdateSelectedAssetDetails(clickedAsset);
-        UpdateAssetContextMenuVisibility();
-        OnPropertyChanged(nameof(SelectedAssetEntry));
-        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
+        SelectAssets([clickedAsset], clickedAsset);
+    }
+
+    public void SelectAssetFromPointer(AssetModel? clickedAsset)
+    {
+        if (clickedAsset is null)
+        {
+            return;
+        }
+
+        if (GetSelectedAssetsFromSource().Any(asset => ReferenceEquals(asset, clickedAsset)))
+        {
+            SyncAssetSelectionFromSource();
+            return;
+        }
+
+        SelectAssets([clickedAsset], clickedAsset);
     }
 
     [RelayCommand]
@@ -843,14 +938,14 @@ public partial class DataExplorerViewModel : ViewModelBase
             {
                 new HierarchicalExpanderColumn<FolderTreeNodeModel>(
                     new TemplateColumn<FolderTreeNodeModel>(
-                        "Name",
+                        CreateFolderColumnHeader(),
                         "FolderNameCell",
                         null,
                         new GridLength(1, GridUnitType.Star),
                         options: new()
                         {
                             CanUserResizeColumn = false,
-                            CanUserSortColumn = false,
+                            CanUserSortColumn = true,
                             CompareAscending = FolderTreeNodeModel.SortAscending(x => x.Name),
                             CompareDescending = FolderTreeNodeModel.SortDescending(x => x.Name)
                         }),
@@ -860,45 +955,41 @@ public partial class DataExplorerViewModel : ViewModelBase
             }
         };
 
+        source.RowSelection!.SingleSelect = false;
         source.RowSelection!.SelectionChanged += OnSelectionChanged;
         source.Sort(FolderTreeNodeModel.SortAscending(x => x.Name));
         return source;
     }
 
-    private void SelectFolder(FolderTreeNodeModel node)
-    {
-        m_selectedFolderNode = node;
-        SelectedFolderName = node.Name;
-        m_currentAssets = node.GetSortedAssets();
-        RefreshAssetList();
-    }
-
     private void RefreshAssetList()
     {
+        IReadOnlyList<string> selectedAssetKeys = CaptureSelectedAssetKeys();
         Func<AssetModel, bool> predicate = BuildAssetPredicate();
         AssetModel[] items = m_currentAssets.Where(predicate).ToArray();
+        m_visibleAssets = items;
         AssetsSource.Items = items;
         AssetCount = items.Length;
+        RestoreAssetSelection(selectedAssetKeys);
+        SyncAssetSelectionFromSource();
     }
 
     private void UpdateAssetContextMenuVisibility()
     {
-        bool canRevert = false;
-        if (m_selectedAsset?.Entry is EbxAssetEntry entry)
-        {
-            canRevert = TextureAssetOperations.IsTextureAsset(entry)
-                ? TextureAssetOperations.IsModified(entry)
-                : MeshAssetOperations.IsMeshAsset(entry)
-                    ? MeshAssetOperations.IsModified(entry)
-                : SoundAssetEditorViewModel.IsSoundAsset(entry)
-                    ? SoundAssetOperations.IsModified(entry)
-                : AssetManager.IsEbxModified(entry.Name);
-        }
+        bool canRevert = GetSelectedEbxEntries().Any(CanRevertAsset);
         m_revertAssetMenuItem.IsVisible = canRevert;
+        m_revertAssetMenuItem.Header = m_selectedAssets.Count > 1 ? "Revert Selected" : "Revert";
     }
 
     private void UpdateSelectedAssetDetails(AssetModel? asset)
     {
+        if (m_selectedAssets.Count > 1)
+        {
+            SelectedAssetName = $"{m_selectedAssets.Count.ToString("N0", CultureInfo.CurrentCulture)} assets selected";
+            SelectedAssetType = "Type: Multiple";
+            SelectedAssetPath = "Path: Multiple selection";
+            return;
+        }
+
         if (asset?.Entry is null)
         {
             SelectedAssetName = "Nothing selected";
@@ -910,6 +1001,466 @@ public partial class DataExplorerViewModel : ViewModelBase
         SelectedAssetName = asset.Entry.Filename;
         SelectedAssetType = $"Type: {asset.Entry.Type}";
         SelectedAssetPath = $"Path: {asset.Entry.Path}";
+    }
+
+    private object CreateFolderColumnHeader()
+    {
+        TextBlock nameText = new()
+        {
+            Text = "Name",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        TextBlock summaryText = new()
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Avalonia.Thickness(12, 0, 0, 0),
+            Foreground = Avalonia.Media.Brushes.White
+        };
+        summaryText[!TextBlock.TextProperty] = new Binding(nameof(FolderHeaderSummaryLabel));
+
+        Grid headerGrid = new()
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(new GridLength(1, GridUnitType.Star))
+            },
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            IsHitTestVisible = false
+        };
+
+        Grid.SetColumn(summaryText, 1);
+        headerGrid.Children.Add(nameText);
+        headerGrid.Children.Add(summaryText);
+        UpdateFolderHeaderSummary();
+        return headerGrid;
+    }
+
+    private void UpdateFolderHeaderSummary()
+    {
+        FolderHeaderSummaryLabel =
+            $"Folders {SelectedFolderCount.ToString("N0", CultureInfo.CurrentCulture)}   Assets {SelectedFolderAssetCount.ToString("N0", CultureInfo.CurrentCulture)}";
+    }
+
+    private void SyncFolderSelectionFromSource()
+    {
+        IReadOnlyList<FolderTreeNodeModel> selectedFolders = GetSelectedFolderNodesFromSource();
+        FolderTreeNodeModel? primaryNode = FolderSource.RowSelection?.SelectedItem ?? selectedFolders.FirstOrDefault();
+        ApplyFolderSelectionSnapshot(selectedFolders, primaryNode);
+    }
+
+    private void SyncAssetSelectionFromSource()
+    {
+        IReadOnlyList<AssetModel> selectedAssets = GetSelectedAssetsFromSource();
+        AssetModel? primaryAsset = AssetsSource.RowSelection?.SelectedItem ?? selectedAssets.FirstOrDefault();
+        ApplyAssetSelectionSnapshot(selectedAssets, primaryAsset);
+    }
+
+    private void ApplyFolderSelectionSnapshot(IReadOnlyList<FolderTreeNodeModel> selectedFolders, FolderTreeNodeModel? primaryNode = null)
+    {
+        m_selectedFolderSelectionCount = selectedFolders.Count;
+        IReadOnlyList<FolderTreeNodeModel> effectiveFolders = NormalizeFolderSelection(selectedFolders);
+        if (effectiveFolders.Count == 0)
+        {
+            effectiveFolders = [m_filteredRoot];
+            primaryNode ??= m_filteredRoot;
+        }
+
+        m_selectedFolderNodes = effectiveFolders;
+        m_selectedFolderNode = primaryNode ?? effectiveFolders[0];
+        SelectedFolderName = m_selectedFolderSelectionCount > 1
+            ? $"{m_selectedFolderSelectionCount.ToString("N0", CultureInfo.CurrentCulture)} folders selected"
+            : m_selectedFolderNode?.Name ?? m_filteredRoot.Name;
+        SelectedFolderCount = CountSelectedFolders(effectiveFolders);
+        SelectedFolderAssetCount = CountSelectedFolderAssets(effectiveFolders);
+
+        ClearAssetSelectionState();
+        m_currentAssets = BuildAssetScope(effectiveFolders);
+        RefreshAssetList();
+    }
+
+    private void ApplyAssetSelectionSnapshot(IReadOnlyList<AssetModel> selectedAssets, AssetModel? primaryAsset = null)
+    {
+        m_selectedAssets = selectedAssets;
+        m_selectedAsset = primaryAsset ?? selectedAssets.FirstOrDefault();
+        UpdateSelectedAssetDetails(m_selectedAsset);
+        UpdateAssetContextMenuVisibility();
+        OnPropertyChanged(nameof(SelectedAssetEntry));
+        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
+    }
+
+    private void ClearAssetSelectionState()
+    {
+        m_selectedAssets = Array.Empty<AssetModel>();
+        m_selectedAsset = null;
+
+        if (AssetsSource.RowSelection is not null)
+        {
+            m_restoringAssetSelection = true;
+            try
+            {
+                AssetsSource.RowSelection.Clear();
+            }
+            finally
+            {
+                m_restoringAssetSelection = false;
+            }
+        }
+
+        UpdateSelectedAssetDetails(null);
+        UpdateAssetContextMenuVisibility();
+        OnPropertyChanged(nameof(SelectedAssetEntry));
+        OnPropertyChanged(nameof(SelectedEbxAssetEntry));
+    }
+
+    private void SelectFolders(IReadOnlyList<FolderTreeNodeModel> folders, FolderTreeNodeModel? primaryNode = null)
+    {
+        IReadOnlyList<FolderTreeNodeModel> selection = folders.Count == 0 ? [m_filteredRoot] : folders;
+
+        if (FolderSource.RowSelection is null)
+        {
+            ApplyFolderSelectionSnapshot(selection, primaryNode);
+            return;
+        }
+
+        m_restoringFolderSelection = true;
+        try
+        {
+            FolderSource.RowSelection.Clear();
+            foreach (FolderTreeNodeModel folder in selection)
+            {
+                ExpandPathToNode(m_filteredRoot, folder);
+                if (TryFindFolderIndexPath(m_filteredRoot, folder, out IndexPath indexPath))
+                {
+                    FolderSource.RowSelection.Select(indexPath);
+                }
+            }
+        }
+        finally
+        {
+            m_restoringFolderSelection = false;
+        }
+
+        ApplyFolderSelectionSnapshot(selection, primaryNode ?? selection[0]);
+    }
+
+    private void SelectAssets(IReadOnlyList<AssetModel> assets, AssetModel? primaryAsset = null)
+    {
+        if (AssetsSource.RowSelection is null)
+        {
+            ApplyAssetSelectionSnapshot(assets, primaryAsset);
+            return;
+        }
+
+        m_restoringAssetSelection = true;
+        try
+        {
+            AssetsSource.RowSelection.Clear();
+            foreach (AssetModel asset in assets.Distinct())
+            {
+                int index = FindVisibleAssetIndex(asset);
+                if (index >= 0)
+                {
+                    AssetsSource.RowSelection.Select(new IndexPath(index));
+                }
+            }
+        }
+        finally
+        {
+            m_restoringAssetSelection = false;
+        }
+
+        ApplyAssetSelectionSnapshot(assets, primaryAsset ?? assets.FirstOrDefault());
+    }
+
+    private void RestoreFolderSelection(IReadOnlyList<string> paths)
+    {
+        List<FolderTreeNodeModel> nodes = new();
+        foreach (string path in paths)
+        {
+            FolderTreeNodeModel? node = string.Equals(path, "ROOT", StringComparison.OrdinalIgnoreCase)
+                ? m_filteredRoot
+                : FindFolderByPath(m_filteredRoot, path);
+
+            if (node is not null)
+            {
+                nodes.Add(node);
+            }
+        }
+
+        if (nodes.Count == 0)
+        {
+            nodes.Add(m_filteredRoot);
+        }
+
+        SelectFolders(nodes, nodes[0]);
+    }
+
+    private void RestoreAssetSelection(IReadOnlyList<string> assetKeys)
+    {
+        if (AssetsSource.RowSelection is null)
+        {
+            return;
+        }
+
+        m_restoringAssetSelection = true;
+        try
+        {
+            AssetsSource.RowSelection.Clear();
+            foreach (string assetKey in assetKeys)
+            {
+                int index = FindVisibleAssetIndex(assetKey);
+                if (index >= 0)
+                {
+                    AssetsSource.RowSelection.Select(new IndexPath(index));
+                }
+            }
+        }
+        finally
+        {
+            m_restoringAssetSelection = false;
+        }
+    }
+
+    private IReadOnlyList<string> CaptureSelectedFolderPaths()
+    {
+        IReadOnlyList<FolderTreeNodeModel> selectedFolders = GetSelectedFolderNodesFromSource();
+        if (selectedFolders.Count == 0 && m_selectedFolderNode is not null)
+        {
+            selectedFolders = [m_selectedFolderNode];
+        }
+
+        string[] paths = selectedFolders
+            .Select(GetFolderPathText)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+
+        return paths.Length == 0 ? ["ROOT"] : paths;
+    }
+
+    private IReadOnlyList<string> CaptureSelectedAssetKeys()
+    {
+        IReadOnlyList<AssetModel> selectedAssets = GetSelectedAssets();
+        return selectedAssets
+            .Select(asset => asset.Entry?.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+    }
+
+    private IReadOnlyList<FolderTreeNodeModel> GetSelectedFolderNodesFromSource()
+    {
+        return FolderSource.RowSelection?.SelectedItems?.OfType<FolderTreeNodeModel>().ToArray()
+               ?? Array.Empty<FolderTreeNodeModel>();
+    }
+
+    private IReadOnlyList<AssetModel> GetSelectedAssetsFromSource()
+    {
+        return AssetsSource.RowSelection?.SelectedItems?.OfType<AssetModel>().ToArray()
+               ?? Array.Empty<AssetModel>();
+    }
+
+    private IReadOnlyList<FolderTreeNodeModel> GetSelectedFolderActionNodes()
+    {
+        return m_selectedFolderNodes.Count > 0 ? m_selectedFolderNodes : [m_filteredRoot];
+    }
+
+    private IReadOnlyList<AssetModel> GetSelectedAssets()
+    {
+        if (m_selectedAssets.Count > 0)
+        {
+            return m_selectedAssets;
+        }
+
+        return m_selectedAsset is null ? Array.Empty<AssetModel>() : [m_selectedAsset];
+    }
+
+    private IReadOnlyList<EbxAssetEntry> GetSelectedEbxEntries()
+    {
+        return GetSelectedAssets()
+            .Select(asset => asset.Entry as EbxAssetEntry)
+            .Where(entry => entry is not null)
+            .Cast<EbxAssetEntry>()
+            .DistinctBy(entry => entry.Name)
+            .ToArray();
+    }
+
+    private IReadOnlyList<AssetModel> BuildAssetScope(IReadOnlyList<FolderTreeNodeModel> selectedFolders)
+    {
+        Dictionary<string, AssetModel> assets = new(StringComparer.OrdinalIgnoreCase);
+        foreach (FolderTreeNodeModel folder in selectedFolders)
+        {
+            CollectDirectAssets(folder, assets);
+        }
+
+        return assets.Values
+            .OrderBy(asset => asset.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private int CountSelectedFolderAssets(IReadOnlyList<FolderTreeNodeModel> selectedFolders)
+    {
+        if (selectedFolders.Count == 0)
+        {
+            return TotalAssetCount;
+        }
+
+        int count = 0;
+        foreach (string path in selectedFolders
+                     .Select(GetFolderPathText)
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)!)
+        {
+            if (string.Equals(path, "ROOT", StringComparison.OrdinalIgnoreCase))
+            {
+                return TotalAssetCount;
+            }
+
+            FolderTreeNodeModel? node = FindFolderByPath(m_root, path);
+            if (node is not null)
+            {
+                count += CountAssets(node);
+            }
+        }
+
+        return count;
+    }
+
+    private int CountSelectedFolders(IReadOnlyList<FolderTreeNodeModel> selectedFolders)
+    {
+        if (selectedFolders.Count == 0)
+        {
+            return FolderCount;
+        }
+
+        int count = 0;
+        foreach (string path in selectedFolders
+                     .Select(GetFolderPathText)
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)!)
+        {
+            if (string.Equals(path, "ROOT", StringComparison.OrdinalIgnoreCase))
+            {
+                return FolderCount;
+            }
+
+            FolderTreeNodeModel? node = FindFolderByPath(m_root, path);
+            if (node is not null)
+            {
+                count += CountFolders(node);
+            }
+        }
+
+        return count;
+    }
+
+    private static IReadOnlyList<FolderTreeNodeModel> NormalizeFolderSelection(IReadOnlyList<FolderTreeNodeModel> selectedFolders)
+    {
+        List<FolderTreeNodeModel> distinctFolders = selectedFolders
+            .Where(folder => folder is not null)
+            .Distinct()
+            .ToList();
+
+        return distinctFolders
+            .Where(folder => !distinctFolders.Any(other => !ReferenceEquals(other, folder) && IsDescendantOf(folder, other)))
+            .ToArray();
+    }
+
+    private static bool IsDescendantOf(FolderTreeNodeModel folder, FolderTreeNodeModel ancestor)
+    {
+        for (FolderTreeNodeModel? current = folder.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void CollectDirectAssets(FolderTreeNodeModel folder, Dictionary<string, AssetModel> assets)
+    {
+        foreach (AssetModel asset in folder.Assets)
+        {
+            string key = asset.Entry?.Name ?? asset.Name ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                assets[key] = asset;
+            }
+        }
+    }
+
+    private static bool TryFindFolderIndexPath(FolderTreeNodeModel root, FolderTreeNodeModel target, out IndexPath indexPath)
+    {
+        List<int> segments = [0];
+        if (TryFindFolderIndexPathCore(root, target, segments))
+        {
+            indexPath = new IndexPath(segments.ToArray());
+            return true;
+        }
+
+        indexPath = default;
+        return false;
+    }
+
+    private static bool TryFindFolderIndexPathCore(FolderTreeNodeModel current, FolderTreeNodeModel target, List<int> segments)
+    {
+        if (ReferenceEquals(current, target))
+        {
+            return true;
+        }
+
+        for (int i = 0; i < current.Children.Count; i++)
+        {
+            segments.Add(i);
+            if (TryFindFolderIndexPathCore(current.Children[i], target, segments))
+            {
+                return true;
+            }
+
+            segments.RemoveAt(segments.Count - 1);
+        }
+
+        return false;
+    }
+
+    private int FindVisibleAssetIndex(AssetModel asset)
+    {
+        string? assetKey = asset.Entry?.Name;
+        return FindVisibleAssetIndex(assetKey);
+    }
+
+    private int FindVisibleAssetIndex(string? assetKey)
+    {
+        if (string.IsNullOrWhiteSpace(assetKey))
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < m_visibleAssets.Count; i++)
+        {
+            if (string.Equals(m_visibleAssets[i].Entry?.Name, assetKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool CanRevertAsset(EbxAssetEntry entry)
+    {
+        return TextureAssetOperations.IsTextureAsset(entry)
+            ? TextureAssetOperations.IsModified(entry)
+            : MeshAssetOperations.IsMeshAsset(entry)
+                ? MeshAssetOperations.IsModified(entry)
+                : SoundAssetEditorViewModel.IsSoundAsset(entry)
+                    ? SoundAssetOperations.IsModified(entry)
+                    : AssetManager.IsEbxModified(entry.Name);
     }
 
     private static string? GetAssetPathText(AssetModel? asset)
@@ -982,14 +1533,14 @@ public partial class DataExplorerViewModel : ViewModelBase
             return;
         }
 
-        SelectFolder(folder);
-        AssetModel? asset = m_currentAssets.FirstOrDefault(model => string.Equals(model.Entry?.Name, entry.Name, StringComparison.OrdinalIgnoreCase));
+        SelectFolders([folder], folder);
+        AssetModel? asset = m_visibleAssets.FirstOrDefault(model => string.Equals(model.Entry?.Name, entry.Name, StringComparison.OrdinalIgnoreCase));
         if (asset is null)
         {
             return;
         }
 
-        HandleAssetTapped(asset);
+        SelectAssets([asset], asset);
         if (openAsset && entry is EbxAssetEntry)
         {
             _ = OpenAsset();
@@ -1050,7 +1601,7 @@ public partial class DataExplorerViewModel : ViewModelBase
 
     private void RebuildFilteredTree()
     {
-        string[]? selectedPath = GetNodePath(m_filteredRoot, m_selectedFolderNode);
+        IReadOnlyList<string> selectedFolderPaths = CaptureSelectedFolderPaths();
         Func<AssetModel, bool> predicate = BuildAssetPredicate();
 
         bool filterActive = IsFilterActive();
@@ -1058,12 +1609,8 @@ public partial class DataExplorerViewModel : ViewModelBase
         m_filteredRoot = filterActive
             ? FolderTreeNodeModel.CreateFiltered(m_root, predicate)
             : m_root;
-        m_selectedFolderNode = FindPreferredNode(m_filteredRoot, selectedPath, filterActive);
-        ExpandPathToNode(m_filteredRoot, m_selectedFolderNode);
         FolderSource = CreateFolderSource(m_filteredRoot);
-        SelectedFolderName = m_selectedFolderNode.Name;
-        m_currentAssets = m_selectedFolderNode.GetSortedAssets();
-        RefreshAssetList();
+        RestoreFolderSelection(selectedFolderPaths);
     }
 
     private static FolderTreeNodeModel? FindFolderByPath(FolderTreeNodeModel root, string? path)
@@ -1158,6 +1705,7 @@ public partial class DataExplorerViewModel : ViewModelBase
             }
         }
 
+        UpdateAssetTypeComboMinWidth(m_allAssetTypes);
         ApplyAvailableAssetTypeFilter();
     }
 
@@ -1189,6 +1737,16 @@ public partial class DataExplorerViewModel : ViewModelBase
                 m_suppressAssetTypeSearchSync = false;
             }
         }
+    }
+
+    private void UpdateAssetTypeComboMinWidth(IEnumerable<string> assetTypes)
+    {
+        int longest = assetTypes
+            .Select(type => type?.Length ?? 0)
+            .DefaultIfEmpty(3)
+            .Max();
+        longest = Math.Max(longest, "All".Length);
+        AssetTypeComboMinWidth = Math.Clamp(46 + (longest * 7.1), 176, 500);
     }
 
     private static IEnumerable<string> EnumerateAssetTypes(FolderTreeNodeModel node)

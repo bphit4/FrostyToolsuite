@@ -14,7 +14,7 @@
   <UserControl.Resources>
     <DataTemplate x:Key="SegmentRowTemplate" DataType="models:SoundSegmentItemModel">
       <Border Padding="0" Margin="0" Background="#222228" BorderBrush="#34343B" BorderThickness="0,0,0,1">
-        <Grid ColumnDefinitions="42,108,128,94,54,52,76,152,72,72" MinHeight="18">
+        <Grid ColumnDefinitions="42,112,130,96,56,56,76,156,74,74" MinHeight="20">
           <Border Grid.Column="0" Padding="6,0,0,0" Background="Transparent">
             <CheckBox HorizontalAlignment="Left"
                       VerticalAlignment="Center"
@@ -229,7 +229,7 @@
     <Grid Grid.Row="1">
       <Grid IsVisible="{Binding IsVariationsMode}" RowDefinitions="Auto,*">
         <Border Background="#1E1E23" BorderBrush="#34343B" BorderThickness="0,0,0,1" Padding="0">
-          <Grid ColumnDefinitions="42,108,128,94,54,52,76,152,72,72" Height="18">
+          <Grid ColumnDefinitions="42,112,130,96,56,56,76,156,74,74" Height="22">
             <Border Grid.Column="0" Padding="6,0,0,0" Background="Transparent">
               <CheckBox HorizontalAlignment="Left"
                         VerticalAlignment="Center"

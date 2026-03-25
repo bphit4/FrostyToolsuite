@@ -603,7 +603,7 @@ public sealed partial class MeshAssetEditorViewModel
             width = Math.Max(width, nodeWidth);
         }
 
-        InspectorNameColumnWidth = Math.Clamp(width, 140, 620);
+        InspectorNameColumnWidth = Math.Clamp(width, 140, 260);
     }
 
     private IEnumerable<InspectorNodeModel> GetActiveInspectorVisibleNodes()

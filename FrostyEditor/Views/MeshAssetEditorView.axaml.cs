@@ -11,6 +11,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
 using Avalonia.Threading;
 using FrostyEditor.Controls;
@@ -24,6 +26,12 @@ namespace FrostyEditor.Views;
 
 public partial class MeshAssetEditorView : UserControl
 {
+    private const string InspectorWidthConfigKey = "MeshEditorInspectorWidth";
+    private const string InspectorCollapsedConfigKey = "MeshEditorInspectorCollapsed";
+    private const double DefaultInspectorWidth = 560.0;
+    private const double MinInspectorWidth = 420.0;
+    private const double MaxInspectorWidth = 760.0;
+
     private readonly WindowsMeshViewportHost? m_viewportHost;
     private MeshAssetEditorViewModel? m_boundViewModel;
     private int m_sceneLoadVersion;
@@ -38,6 +46,11 @@ public partial class MeshAssetEditorView : UserControl
     private readonly List<(ListBox NameList, ListBox ValueList)> m_inspectorListPairs = [];
     private readonly List<(ScrollViewer NameScroll, ScrollViewer ValueScroll)> m_inspectorScrollPairs = [];
     private bool m_isSyncingInspectorScroll;
+    private bool m_isInspectorPaneCollapsed = true;
+    private double m_lastInspectorPaneWidth = DefaultInspectorWidth;
+    private Window? m_inspectorWindow;
+    private bool m_isInspectorPaneFloating;
+    private bool m_suppressInspectorWindowClosed;
 
     public MeshAssetEditorView()
     {
@@ -68,6 +81,7 @@ public partial class MeshAssetEditorView : UserControl
 
     private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
+        SaveInspectorPaneState();
         CancelSceneLoad();
         DetachInspectorScrollSync();
         DetachViewModel();
@@ -75,7 +89,247 @@ public partial class MeshAssetEditorView : UserControl
 
     private void OnLoaded(object? sender, EventArgs e)
     {
+        ApplyInspectorPaneState();
         Dispatcher.UIThread.Post(InitializeScrollSync, DispatcherPriority.Loaded);
+    }
+
+    private void OnPropertiesPaneToggleClicked(object? sender, RoutedEventArgs e)
+    {
+        SetInspectorPaneCollapsed(!m_isInspectorPaneCollapsed, save: true);
+    }
+
+    private void OnPropertiesFloatButtonClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isInspectorPaneFloating)
+        {
+            DockInspectorPane();
+            return;
+        }
+
+        FloatInspectorPane();
+    }
+
+    private void OnPropertiesExpandMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isInspectorPaneFloating)
+        {
+            return;
+        }
+
+        SetInspectorPaneCollapsed(false, save: true);
+    }
+
+    private void OnPropertiesCollapseMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isInspectorPaneFloating)
+        {
+            DockInspectorPane();
+        }
+
+        SetInspectorPaneCollapsed(true, save: true);
+    }
+
+    private void OnPropertiesFloatMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        FloatInspectorPane();
+    }
+
+    private void OnPropertiesDockMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        DockInspectorPane();
+    }
+
+    private void OnPropertiesResetDockMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        DockInspectorPane();
+        m_lastInspectorPaneWidth = DefaultInspectorWidth;
+        SetInspectorPaneCollapsed(true, save: false);
+        SaveInspectorPaneState();
+    }
+
+    private void ApplyInspectorPaneState()
+    {
+        m_lastInspectorPaneWidth = Math.Max(
+            DefaultInspectorWidth,
+            Math.Clamp(Config.Get(InspectorWidthConfigKey, DefaultInspectorWidth), MinInspectorWidth, MaxInspectorWidth));
+        SetInspectorPaneCollapsed(false, save: false);
+    }
+
+    private void SaveInspectorPaneState()
+    {
+        Grid? rootGrid = this.FindControl<Grid>("RootLayoutGrid");
+        if (rootGrid is not null &&
+            !m_isInspectorPaneCollapsed &&
+            rootGrid.ColumnDefinitions.Count > 2 &&
+            rootGrid.ColumnDefinitions[2].ActualWidth > 0)
+        {
+            m_lastInspectorPaneWidth = Math.Clamp(rootGrid.ColumnDefinitions[2].ActualWidth, MinInspectorWidth, MaxInspectorWidth);
+            Config.Add(InspectorWidthConfigKey, m_lastInspectorPaneWidth);
+        }
+
+        Config.Add(InspectorCollapsedConfigKey, m_isInspectorPaneCollapsed);
+        Config.Save(App.ConfigPath);
+    }
+
+    private void SetInspectorPaneCollapsed(bool collapsed, bool save)
+    {
+        Grid? rootGrid = this.FindControl<Grid>("RootLayoutGrid");
+        Border? inspectorPane = this.FindControl<Border>("InspectorPane");
+        GridSplitter? splitter = this.FindControl<GridSplitter>("InspectorPaneSplitter");
+        Button? collapsedButton = this.FindControl<Button>("CollapsedInspectorButton");
+        if (rootGrid is null || inspectorPane is null || splitter is null || rootGrid.ColumnDefinitions.Count <= 2)
+        {
+            return;
+        }
+
+        if (!collapsed && rootGrid.ColumnDefinitions[2].ActualWidth > 0)
+        {
+            m_lastInspectorPaneWidth = Math.Clamp(rootGrid.ColumnDefinitions[2].ActualWidth, MinInspectorWidth, MaxInspectorWidth);
+        }
+
+        if (!collapsed)
+        {
+            m_lastInspectorPaneWidth = Math.Max(m_lastInspectorPaneWidth, DefaultInspectorWidth);
+        }
+
+        m_isInspectorPaneCollapsed = collapsed;
+        inspectorPane.IsVisible = !collapsed;
+        splitter.IsVisible = !collapsed;
+        rootGrid.ColumnDefinitions[1].Width = collapsed
+            ? new GridLength(0)
+            : new GridLength(6, GridUnitType.Pixel);
+        rootGrid.ColumnDefinitions[2].Width = collapsed
+            ? new GridLength(0)
+            : new GridLength(m_lastInspectorPaneWidth, GridUnitType.Pixel);
+        UpdateInspectorRailButton(collapsedButton);
+
+        if (save)
+        {
+            SaveInspectorPaneState();
+        }
+    }
+
+    private void FloatInspectorPane()
+    {
+        if (m_isInspectorPaneFloating)
+        {
+            return;
+        }
+
+        Border? inspectorPane = this.FindControl<Border>("InspectorPane");
+        Grid? paneContent = this.FindControl<Grid>("InspectorPaneContent");
+        if (inspectorPane?.Child is not Control child || !ReferenceEquals(child, paneContent))
+        {
+            return;
+        }
+
+        inspectorPane.Child = null;
+        m_isInspectorPaneFloating = true;
+        SetInspectorPaneCollapsed(true, save: false);
+        UpdateInspectorRailButton(this.FindControl<Button>("CollapsedInspectorButton"));
+
+        Window inspectorWindow = new()
+        {
+            Width = Math.Max(m_lastInspectorPaneWidth, DefaultInspectorWidth),
+            Height = 760,
+            MinWidth = 340,
+            MinHeight = 320,
+            Title = "Mesh Properties",
+            Icon = CreateAppIcon()
+        };
+        inspectorWindow.Content = child;
+        inspectorWindow.Closed += OnInspectorWindowClosed;
+        m_inspectorWindow = inspectorWindow;
+        inspectorWindow.Show();
+        inspectorWindow.Activate();
+    }
+
+    private void DockInspectorPane()
+    {
+        if (!m_isInspectorPaneFloating)
+        {
+            return;
+        }
+
+        Border? inspectorPane = this.FindControl<Border>("InspectorPane");
+        Window? inspectorWindow = m_inspectorWindow;
+        Control? child = inspectorWindow?.Content as Control;
+        if (inspectorPane is not null && child is not null)
+        {
+            inspectorWindow!.Content = null;
+            inspectorPane.Child = child;
+        }
+
+        m_inspectorWindow = null;
+        m_isInspectorPaneFloating = false;
+
+        if (inspectorWindow is not null)
+        {
+            inspectorWindow.Closed -= OnInspectorWindowClosed;
+            m_suppressInspectorWindowClosed = true;
+            inspectorWindow.Close();
+            m_suppressInspectorWindowClosed = false;
+        }
+
+        SetInspectorPaneCollapsed(false, save: false);
+        UpdateInspectorRailButton(this.FindControl<Button>("CollapsedInspectorButton"));
+        SaveInspectorPaneState();
+    }
+
+    private void OnInspectorWindowClosed(object? sender, EventArgs e)
+    {
+        if (m_suppressInspectorWindowClosed)
+        {
+            return;
+        }
+
+        Border? inspectorPane = this.FindControl<Border>("InspectorPane");
+        if (inspectorPane is not null && sender is Window inspectorWindow && inspectorWindow.Content is Control child)
+        {
+            inspectorWindow.Content = null;
+            inspectorPane.Child = child;
+        }
+
+        if (sender is Window window)
+        {
+            window.Closed -= OnInspectorWindowClosed;
+        }
+
+        m_inspectorWindow = null;
+        m_isInspectorPaneFloating = false;
+        SetInspectorPaneCollapsed(false, save: false);
+        UpdateInspectorRailButton(this.FindControl<Button>("CollapsedInspectorButton"));
+        SaveInspectorPaneState();
+    }
+
+    private void UpdateInspectorRailButton(Button? collapsedButton)
+    {
+        if (collapsedButton is null)
+        {
+            return;
+        }
+
+        TextBlock? arrow = this.FindControl<TextBlock>("CollapsedInspectorArrow");
+        TextBlock? label = this.FindControl<TextBlock>("CollapsedInspectorLabel");
+
+        collapsedButton.IsVisible = !m_isInspectorPaneFloating;
+        collapsedButton.Width = 38;
+        collapsedButton.Padding = new Thickness(0);
+
+        if (arrow is not null)
+        {
+            arrow.Text = m_isInspectorPaneCollapsed ? "<" : ">";
+        }
+
+        if (label is not null)
+        {
+            label.IsVisible = true;
+        }
+    }
+
+    private static WindowIcon CreateAppIcon()
+    {
+        return new WindowIcon(AssetLoader.Open(new Uri("avares://FrostyEditor/Assets/FrostyApp.ico")));
     }
 
     private bool AttachViewModel(MeshAssetEditorViewModel? viewModel)
@@ -175,14 +429,12 @@ public partial class MeshAssetEditorView : UserControl
                     cancellationToken);
                 MeshViewportSceneData texturedPreviewScene = await texturedPreviewSceneTask;
                 await ApplySceneAsync(viewModel, texturedPreviewScene, version, cancellationToken, applyViewPreset: false);
-                MeshViewportSceneBuilder.QueueDeferredTextureWarmup(viewModel, MeshViewportSceneBuilder.BuildStage.TexturedLowRes);
 
                 Task<MeshViewportSceneData> texturedSceneTask = Task.Run(
                     () => MeshViewportSceneBuilder.Build(viewModel, MeshViewportSceneBuilder.BuildStage.Textured),
                     cancellationToken);
                 MeshViewportSceneData texturedScene = await texturedSceneTask;
                 await ApplySceneAsync(viewModel, texturedScene, version, cancellationToken, applyViewPreset: false);
-                MeshViewportSceneBuilder.QueueDeferredTextureWarmup(viewModel, MeshViewportSceneBuilder.BuildStage.Textured);
             }
         }
         catch (OperationCanceledException)
@@ -631,7 +883,7 @@ public partial class MeshAssetEditorView : UserControl
                 node.IsExpanded = shouldExpand;
             }
 
-            RefreshInspectorRows(node);
+            RefreshInspectorRows();
             e.Handled = true;
             return;
         }
@@ -965,7 +1217,7 @@ public partial class MeshAssetEditorView : UserControl
         }
 
         node.ExpandOneLevelProgressive();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnExpandAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -976,7 +1228,7 @@ public partial class MeshAssetEditorView : UserControl
         }
 
         node.ExpandAllDescendants();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnCollapseOneLevelMenuItemClick(object? sender, RoutedEventArgs e)
@@ -987,7 +1239,7 @@ public partial class MeshAssetEditorView : UserControl
         }
 
         node.CollapseOneLevelProgressive();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private void OnCollapseAllLevelsMenuItemClick(object? sender, RoutedEventArgs e)
@@ -998,7 +1250,7 @@ public partial class MeshAssetEditorView : UserControl
         }
 
         node.CollapseAllDescendants();
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
     }
 
     private static bool IsEmbeddedControlInteraction(object? source)
@@ -1087,16 +1339,6 @@ public partial class MeshAssetEditorView : UserControl
 
         PreserveInspectorViewports(() =>
         {
-            if (node is not null)
-            {
-                if (!viewModel.TryRefreshInspectorRows(node))
-                {
-                    viewModel.RebuildInspectorPanels();
-                }
-
-                return;
-            }
-
             viewModel.RefreshAllInspectorRows();
         });
     }

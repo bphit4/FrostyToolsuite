@@ -25,6 +25,12 @@ namespace FrostyEditor.ViewModels;
 
 public partial class ProfileSelectViewModel : WindowViewModel
 {
+    private const string Madden26FallbackKeyPath = @"C:\Users\Shadow\Documents\GitHub\madden26.key";
+    private const double DefaultWindowWidth = 620;
+    private const double DefaultWindowHeight = 760;
+    private const double BusyWindowWidth = 620;
+    private const double BusyWindowHeight = 760;
+
     public class ProfileConfig
     {
         public string Name { get; set; }
@@ -72,6 +78,9 @@ public partial class ProfileSelectViewModel : WindowViewModel
     public bool CanEditProfiles => !IsBusy;
     public bool HasStartupLog => IsBusy || StartupLogger.EntryCount > 0;
     public bool IsStartupProgressIndeterminate => IsBusy && !StartupLogger.HasProgress;
+    public bool ShowProfilePicker => !IsBusy;
+    public bool ShowSelectedProfileCard => IsBusy && SelectedProfile is not null;
+    public bool ShowProfileActions => !IsBusy;
 
     private OperationStepViewModel? m_profileMetadataStep;
     private OperationStepViewModel? m_initFsStep;
@@ -87,8 +96,8 @@ public partial class ProfileSelectViewModel : WindowViewModel
     public ProfileSelectViewModel()
     {
         Title = "FrostyEditor";
-        Width = 620;
-        Height = 760;
+        Width = DefaultWindowWidth;
+        Height = DefaultWindowHeight;
         StartupLogger.PropertyChanged += OnStartupLoggerPropertyChanged;
 
         // init ProfilesLibrary to load all profile json files
@@ -109,8 +118,23 @@ public partial class ProfileSelectViewModel : WindowViewModel
             }
         }
 
-        SelectedProfile = Profiles.FirstOrDefault();
+        string? requestedProfile = App.StartupOptions.ProfileKey;
+        SelectedProfile = Profiles.FirstOrDefault(profile =>
+            !string.IsNullOrWhiteSpace(requestedProfile) &&
+            string.Equals(profile.Key, requestedProfile, StringComparison.OrdinalIgnoreCase))
+            ?? Profiles.FirstOrDefault();
         Config.Save(App.ConfigPath);
+
+        if (App.StartupOptions.AutoSelectProfile && SelectedProfile is not null)
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                if (!IsBusy && SelectedProfile is not null)
+                {
+                    await SelectProfile();
+                }
+            }, DispatcherPriority.Background);
+        }
     }
 
     private async Task<byte[]?> ResolveInitFsKeyAsync()
@@ -118,7 +142,9 @@ public partial class ProfileSelectViewModel : WindowViewModel
         string configuredPath = Config.Get("InitFsKeyPath", string.Empty);
         string[] candidatePaths =
         {
+            App.StartupOptions.InitFsKeyPath ?? string.Empty,
             configuredPath,
+            Madden26FallbackKeyPath,
             Path.Combine(Frosty.Sdk.Utils.Utils.BaseDirectory, "Keys", "initFs.key"),
             Path.Combine(AppContext.BaseDirectory, "Keys", "initFs.key"),
             Path.Combine(AppContext.BaseDirectory, "initFs.key")
@@ -380,10 +406,24 @@ failed:
 
     partial void OnSelectedProfileChanged(ProfileConfig? value)
     {
+        OnPropertyChanged(nameof(ShowSelectedProfileCard));
         if (!IsBusy)
         {
             StartupStatus = value is null ? string.Empty : $"Ready to initialize '{value.Name}'.";
         }
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        Width = value ? BusyWindowWidth : DefaultWindowWidth;
+        Height = value ? BusyWindowHeight : DefaultWindowHeight;
+        OnPropertyChanged(nameof(CanInteract));
+        OnPropertyChanged(nameof(CanEditProfiles));
+        OnPropertyChanged(nameof(HasStartupLog));
+        OnPropertyChanged(nameof(IsStartupProgressIndeterminate));
+        OnPropertyChanged(nameof(ShowProfilePicker));
+        OnPropertyChanged(nameof(ShowSelectedProfileCard));
+        OnPropertyChanged(nameof(ShowProfileActions));
     }
 
     partial void OnStartupLoggerChanged(LoggerViewModel value)

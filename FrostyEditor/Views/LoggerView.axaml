@@ -69,53 +69,56 @@
   </UserControl.Resources>
   <UserControl.Styles>
     <Style Selector="TextBox#LoggerTextBox">
-      <Setter Property="Padding" Value="2,1"/>
+      <Setter Property="Padding" Value="1,0"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="BorderBrush" Value="Transparent"/>
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="#F0F0F0"/>
       <Setter Property="FontSize" Value="10.5"/>
+      <Setter Property="ClipToBounds" Value="True"/>
     </Style>
     <Style Selector="TextBox.logger-pane-textbox">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="#F0F0F0"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="2,1"/>
+      <Setter Property="Padding" Value="1,0"/>
       <Setter Property="FontSize" Value="11"/>
       <Setter Property="VerticalAlignment" Value="Stretch"/>
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="ClipToBounds" Value="True"/>
     </Style>
     <Style Selector="ToggleButton.logger-tab-toggle">
-      <Setter Property="Background" Value="#34343A"/>
-      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="Background" Value="#242429"/>
+      <Setter Property="BorderBrush" Value="#34343A"/>
       <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="CornerRadius" Value="3,3,0,0"/>
-      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="7,2"/>
       <Setter Property="Margin" Value="0,0,1,0"/>
-      <Setter Property="MinWidth" Value="54"/>
+      <Setter Property="MinWidth" Value="62"/>
       <Setter Property="MinHeight" Value="20"/>
-      <Setter Property="FontSize" Value="10.5"/>
+      <Setter Property="FontSize" Value="10"/>
     </Style>
     <Style Selector="ToggleButton.logger-tab-toggle:checked">
-      <Setter Property="Background" Value="#3E3E45"/>
-      <Setter Property="BorderBrush" Value="#676770"/>
+      <Setter Property="Background" Value="#3C3C41"/>
+      <Setter Property="BorderBrush" Value="#63636A"/>
     </Style>
     <Style Selector="Border.logger-pane">
-      <Setter Property="Background" Value="#29292C"/>
-      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="Background" Value="#17171A"/>
+      <Setter Property="BorderBrush" Value="#303036"/>
       <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="ClipToBounds" Value="True"/>
     </Style>
     <Style Selector="Border.logger-table-header">
-      <Setter Property="Background" Value="#3A3A3F"/>
-      <Setter Property="BorderBrush" Value="#505056"/>
+      <Setter Property="Background" Value="#2A2A2E"/>
+      <Setter Property="BorderBrush" Value="#3A3A40"/>
       <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Padding" Value="5,2"/>
+      <Setter Property="Padding" Value="4,1"/>
     </Style>
     <Style Selector="Border.logger-title-bar">
-      <Setter Property="Background" Value="#34343A"/>
-      <Setter Property="BorderBrush" Value="#4E4E55"/>
+      <Setter Property="Background" Value="#1F1F23"/>
+      <Setter Property="BorderBrush" Value="#34343A"/>
       <Setter Property="BorderThickness" Value="1,1,1,0"/>
-      <Setter Property="Padding" Value="5,2"/>
+      <Setter Property="Padding" Value="4,2"/>
     </Style>
     <Style Selector="Border.logger-title-bar TextBlock">
       <Setter Property="FontSize" Value="11"/>
@@ -148,6 +151,7 @@
       <Setter Property="Background" Value="#34343A"/>
       <Setter Property="BorderBrush" Value="#4E4E55"/>
       <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="0"/>
     </Style>
     <Style Selector="Border.bookmark-node-row">
       <Setter Property="Background" Value="Transparent"/>
@@ -169,24 +173,24 @@
       <Setter Property="Margin" Value="0"/>
     </Style>
   </UserControl.Styles>
-  <Grid RowDefinitions="Auto,*">
-    <StackPanel Orientation="Horizontal">
+  <Grid RowDefinitions="Auto,*,Auto" ClipToBounds="True">
+    <StackPanel Orientation="Horizontal" Margin="0,0,52,0">
       <ToggleButton Classes="logger-tab-toggle"
                     IsChecked="{Binding IsLogTabSelected}"
                     Command="{Binding ShowLogTabCommand}"
                     Content="Log"/>
       <ToggleButton Classes="logger-tab-toggle"
-                    IsChecked="{Binding IsBookmarksTabSelected}"
-                    Command="{Binding ShowBookmarksTabCommand}"
-                    Content="Bookmarks"/>
+                    IsChecked="{Binding IsReferencesTabSelected}"
+                    Command="{Binding ShowReferencesTabCommand}"
+                    Content="References"/>
       <ToggleButton Classes="logger-tab-toggle"
                     IsChecked="{Binding IsBundlesTabSelected}"
                     Command="{Binding ShowBundlesTabCommand}"
                     Content="Bundles"/>
       <ToggleButton Classes="logger-tab-toggle"
-                    IsChecked="{Binding IsReferencesTabSelected}"
-                    Command="{Binding ShowReferencesTabCommand}"
-                    Content="References"/>
+                    IsChecked="{Binding IsBookmarksTabSelected}"
+                    Command="{Binding ShowBookmarksTabCommand}"
+                    Content="Bookmarks"/>
     </StackPanel>
 
     <Border Grid.Row="1" Classes="logger-pane">
@@ -437,5 +441,8 @@
           </Grid>
       </Grid>
     </Border>
+    <Border Grid.Row="2"
+            Height="1"
+            Background="#2D2D32"/>
   </Grid>
 </UserControl>

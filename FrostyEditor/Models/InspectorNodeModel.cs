@@ -302,16 +302,7 @@ public sealed partial class InspectorNodeModel : ObservableObject
             return false;
         }
 
-        EnsureChildrenLoaded();
-        bool changed = !IsExpanded;
-        SetExpandedState(true, childrenAlreadyLoaded: true);
-
-        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
-        {
-            changed |= child.ExpandAllDescendants();
-        }
-
-        return changed;
+        return SetBranchExpandedState(isExpanded: true);
     }
 
     public bool ExpandOneLevelProgressive()
@@ -321,29 +312,8 @@ public sealed partial class InspectorNodeModel : ObservableObject
             return false;
         }
 
-        EnsureChildrenLoaded();
-        if (!IsExpanded)
-        {
-            SetExpandedState(true, childrenAlreadyLoaded: true);
-            return true;
-        }
-
-        bool changed = false;
-        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder && child.HasChildren))
-        {
-            if (child.IsExpanded)
-            {
-                changed |= child.ExpandOneLevelProgressive();
-            }
-            else
-            {
-                child.EnsureChildrenLoaded();
-                child.SetExpandedState(true, childrenAlreadyLoaded: true);
-                changed = true;
-            }
-        }
-
-        return changed;
+        int currentDepth = GetDeepestExpandedDepth();
+        return ExpandToDepth(Math.Max(0, currentDepth + 1));
     }
 
     public bool CollapseAllDescendants()
@@ -353,59 +323,174 @@ public sealed partial class InspectorNodeModel : ObservableObject
             return false;
         }
 
+        return SetBranchExpandedState(isExpanded: false);
+    }
+
+    public bool CollapseOneLevelProgressive()
+    {
+        if (!HasChildren)
+        {
+            return false;
+        }
+
+        int currentDepth = GetDeepestExpandedDepth();
+        if (currentDepth <= 0)
+        {
+            return SetBranchExpandedState(isExpanded: false);
+        }
+
+        return CollapseExpandedDepth(currentDepth);
+    }
+
+    public bool CollapseToDepth(int depth)
+    {
+        if (!HasChildren || depth < 0)
+        {
+            return false;
+        }
+
         EnsureChildrenLoaded();
-        bool changed = !IsExpanded;
+        bool changed = IsExpanded;
+        SetExpandedState(false, childrenAlreadyLoaded: true);
+
+        if (depth == 0)
+        {
+            return changed;
+        }
 
         foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
         {
-            changed |= child.CollapseAllDescendants();
-            if (child.IsExpanded)
-            {
-                child.IsExpanded = false;
-                changed = true;
-            }
-        }
-
-        if (IsExpanded)
-        {
-            SetExpandedState(false);
-            changed = true;
+            changed |= child.CollapseToDepth(depth - 1);
         }
 
         return changed;
     }
 
-    public bool CollapseOneLevelProgressive()
+    private bool ExpandEntireBranch()
     {
-        if (!HasChildren || !IsExpanded)
+        if (!HasChildren)
         {
             return false;
         }
 
+        EnsureChildrenLoaded();
+        bool changed = !IsExpanded;
+        SetExpandedState(true, childrenAlreadyLoaded: true);
+
+        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
+        {
+            changed |= child.ExpandEntireBranch();
+        }
+
+        return changed;
+    }
+
+    private bool CollapseEntireBranch()
+    {
+        if (!HasChildren)
+        {
+            return false;
+        }
+
+        EnsureChildrenLoaded();
+        bool changed = IsExpanded;
+        SetExpandedState(false, childrenAlreadyLoaded: true);
+
+        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder))
+        {
+            changed |= child.CollapseEntireBranch();
+        }
+
+        return changed;
+    }
+
+    private bool SetBranchExpandedState(bool isExpanded)
+    {
+        Stack<InspectorNodeModel> stack = new();
+        stack.Push(this);
         bool changed = false;
-        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder && child.HasChildren && child.IsExpanded))
+
+        while (stack.Count > 0)
         {
-            changed |= child.CollapseOneLevelProgressive();
+            InspectorNodeModel node = stack.Pop();
+            if (!node.HasChildren)
+            {
+                continue;
+            }
+
+            node.EnsureChildrenLoaded();
+            changed |= node.IsExpanded != isExpanded;
+            node.SetExpandedState(isExpanded, childrenAlreadyLoaded: true);
+
+            foreach (InspectorNodeModel child in node.Children.Where(static child => !child.IsPlaceholder))
+            {
+                stack.Push(child);
+            }
         }
 
-        if (changed)
+        return changed;
+    }
+
+    private int GetDeepestExpandedDepth()
+    {
+        if (!HasChildren)
         {
-            return true;
+            return -1;
         }
 
-        foreach (InspectorNodeModel child in Children.Where(static child => !child.IsPlaceholder && child.HasChildren && child.IsExpanded))
+        EnsureChildrenLoaded();
+        int deepestDepth = IsExpanded ? 0 : -1;
+        Queue<(InspectorNodeModel Node, int Depth)> queue = new();
+        queue.Enqueue((this, 0));
+
+        while (queue.Count > 0)
         {
-            child.IsExpanded = false;
-            changed = true;
+            (InspectorNodeModel node, int depth) = queue.Dequeue();
+            if (!node.HasChildren || !node.IsExpanded)
+            {
+                continue;
+            }
+
+            deepestDepth = Math.Max(deepestDepth, depth);
+            node.EnsureChildrenLoaded();
+            foreach (InspectorNodeModel child in node.Children.Where(static child => !child.IsPlaceholder))
+            {
+                queue.Enqueue((child, depth + 1));
+            }
         }
 
-        if (changed)
+        return deepestDepth;
+    }
+
+    private bool CollapseExpandedDepth(int targetDepth)
+    {
+        Queue<(InspectorNodeModel Node, int Depth)> queue = new();
+        queue.Enqueue((this, 0));
+        bool changed = false;
+
+        while (queue.Count > 0)
         {
-            return true;
+            (InspectorNodeModel node, int depth) = queue.Dequeue();
+            if (!node.HasChildren)
+            {
+                continue;
+            }
+
+            node.EnsureChildrenLoaded();
+            if (depth == targetDepth)
+            {
+                changed |= node.IsExpanded;
+                node.SetExpandedState(false, childrenAlreadyLoaded: true);
+                continue;
+            }
+
+            foreach (InspectorNodeModel child in node.Children.Where(static child => !child.IsPlaceholder))
+            {
+                queue.Enqueue((child, depth + 1));
+            }
         }
 
-        SetExpandedState(false);
-        return true;
+        return changed;
     }
 
     private void SetExpandedState(bool value, bool childrenAlreadyLoaded = false)

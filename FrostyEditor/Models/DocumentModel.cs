@@ -12,9 +12,9 @@ public partial class DocumentModel : ObservableObject
     public ICommand? CloseCommand { get; set; }
     public ICommand? ActivateCommand { get; set; }
 
-    public string TabBackground => IsActive ? "#A42D21" : "#35353A";
-    public string TabBorderBrush => IsActive ? "#C64A3C" : "#4E4E55";
-    public string TabForeground => "#F2F2F2";
+    public string TabBackground => IsActive ? "#5A5A5E" : "#202024";
+    public string TabBorderBrush => IsActive ? "#7A7A7F" : "#3C3C40";
+    public string TabForeground => IsActive ? "#FFFFFF" : "#B8B8BC";
 
     [ObservableProperty]
     private bool m_isActive;

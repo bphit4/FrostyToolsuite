@@ -142,10 +142,13 @@ public static class LegacyAssetLoader
 
         if (ProfilesLibrary.IsLoaded(
                 ProfileVersion.Fifa21,
+                ProfileVersion.Madden21,
                 ProfileVersion.Madden22,
                 ProfileVersion.Fifa22,
                 ProfileVersion.Madden23,
-                ProfileVersion.Fifa23))
+                ProfileVersion.Fifa23,
+                ProfileVersion.Madden25,
+                ProfileVersion.Madden26))
         {
             format = LegacyCollectorFormat.V2;
             return true;

@@ -91,6 +91,12 @@ public partial class LegacyExplorerViewModel : ViewModelBase
     private string m_selectedAssetTypeFilter = "All";
 
     [ObservableProperty]
+    private string m_selectedAssetTypeFilterDisplay = "Type: All";
+
+    [ObservableProperty]
+    private double m_assetTypeComboMinWidth = 220;
+
+    [ObservableProperty]
     private string m_assetTypeSearchText = string.Empty;
 
     [ObservableProperty]
@@ -178,6 +184,8 @@ public partial class LegacyExplorerViewModel : ViewModelBase
 
     partial void OnSelectedAssetTypeFilterChanged(string value)
     {
+        SelectedAssetTypeFilterDisplay = $"Type: {value}";
+
         if (!m_suppressAssetTypeSearchSync)
         {
             AssetTypeSearchText = string.Equals(value, "All", StringComparison.OrdinalIgnoreCase) ? string.Empty : value;
@@ -567,8 +575,12 @@ public partial class LegacyExplorerViewModel : ViewModelBase
     private void SelectFolder(LegacyFolderTreeNodeModel node)
     {
         m_selectedFolderNode = node;
+        m_selectedAsset = null;
         SelectedFolderName = node.Name;
         m_currentAssets = node.GetSortedAssets();
+        SelectedAssetName = "Nothing selected";
+        SelectedAssetType = "Type: N/A";
+        SelectedAssetPath = "Path: N/A";
         RefreshAssetList();
     }
 
@@ -670,6 +682,7 @@ public partial class LegacyExplorerViewModel : ViewModelBase
             }
         }
 
+        UpdateAssetTypeComboMinWidth(m_allAssetTypes);
         ApplyAvailableAssetTypeFilter();
     }
 
@@ -697,6 +710,16 @@ public partial class LegacyExplorerViewModel : ViewModelBase
                 m_suppressAssetTypeSearchSync = false;
             }
         }
+    }
+
+    private void UpdateAssetTypeComboMinWidth(IEnumerable<string> assetTypes)
+    {
+        int longest = assetTypes
+            .Select(type => type?.Length ?? 0)
+            .DefaultIfEmpty(3)
+            .Max();
+        longest = Math.Max(longest, "All".Length);
+        AssetTypeComboMinWidth = Math.Clamp(46 + (longest * 7.1), 176, 500);
     }
 
     private static IEnumerable<string> EnumerateAssetTypes(LegacyFolderTreeNodeModel node)

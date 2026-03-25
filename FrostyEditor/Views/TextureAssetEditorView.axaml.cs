@@ -8,6 +8,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using FrostyEditor.Managers;
@@ -19,6 +21,12 @@ namespace FrostyEditor.Views;
 
 public partial class TextureAssetEditorView : UserControl
 {
+    private const string PropertiesWidthConfigKey = "TextureEditorPropertiesWidth";
+    private const string PropertiesCollapsedConfigKey = "TextureEditorPropertiesCollapsed";
+    private const double DefaultPropertiesWidth = 480.0;
+    private const double MinPropertiesWidth = 360.0;
+    private const double MaxPropertiesWidth = 680.0;
+
     // ── Viewport / zoom ───────────────────────────────────────────
     private Border? m_viewportHost;
     private Canvas? m_previewCanvas;
@@ -43,6 +51,11 @@ public partial class TextureAssetEditorView : UserControl
 
     // ── Context menu ─────────────────────────────────────────────
     private InspectorNodeModel? m_contextNode;
+    private bool m_isPropertiesPaneCollapsed = true;
+    private double m_lastPropertiesPaneWidth = DefaultPropertiesWidth;
+    private Window? m_propertiesWindow;
+    private bool m_isPropertiesPaneFloating;
+    private bool m_suppressPropertiesWindowClosed;
 
     public TextureAssetEditorView()
     {
@@ -53,6 +66,8 @@ public partial class TextureAssetEditorView : UserControl
 
     private void OnLoaded(object? sender, EventArgs e)
     {
+        ApplyPropertiesPaneState();
+
         m_viewportHost = this.FindControl<Border>("ViewportHost");
         m_previewCanvas = this.FindControl<Canvas>("PreviewCanvas");
         m_previewImage = this.FindControl<Image>("PreviewImage");
@@ -100,6 +115,8 @@ public partial class TextureAssetEditorView : UserControl
 
     private void OnUnloaded(object? sender, EventArgs e)
     {
+        SavePropertiesPaneState();
+
         if (DataContext is TextureAssetEditorViewModel vm)
         {
             vm.PropertyChanged -= OnViewModelPropertyChanged;
@@ -364,7 +381,7 @@ public partial class TextureAssetEditorView : UserControl
                 node.IsExpanded = shouldExpand;
             }
 
-            RefreshInspectorRows(node);
+            RefreshInspectorRows();
             e.Handled = true;
             return;
         }
@@ -397,6 +414,245 @@ public partial class TextureAssetEditorView : UserControl
         {
             node.IsExpanded = true;
         }
+    }
+
+    private void OnPropertiesPaneToggleClicked(object? sender, RoutedEventArgs e)
+    {
+        SetPropertiesPaneCollapsed(!m_isPropertiesPaneCollapsed, save: true);
+    }
+
+    private void OnPropertiesFloatButtonClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isPropertiesPaneFloating)
+        {
+            DockPropertiesPane();
+            return;
+        }
+
+        FloatPropertiesPane();
+    }
+
+    private void OnPropertiesExpandMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isPropertiesPaneFloating)
+        {
+            return;
+        }
+
+        SetPropertiesPaneCollapsed(false, save: true);
+    }
+
+    private void OnPropertiesCollapseMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        if (m_isPropertiesPaneFloating)
+        {
+            DockPropertiesPane();
+        }
+
+        SetPropertiesPaneCollapsed(true, save: true);
+    }
+
+    private void OnPropertiesFloatMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        FloatPropertiesPane();
+    }
+
+    private void OnPropertiesDockMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        DockPropertiesPane();
+    }
+
+    private void OnPropertiesResetDockMenuClicked(object? sender, RoutedEventArgs e)
+    {
+        DockPropertiesPane();
+        m_lastPropertiesPaneWidth = DefaultPropertiesWidth;
+        SetPropertiesPaneCollapsed(true, save: false);
+        SavePropertiesPaneState();
+    }
+
+    private void ApplyPropertiesPaneState()
+    {
+        m_lastPropertiesPaneWidth = Math.Max(
+            DefaultPropertiesWidth,
+            Math.Clamp(Config.Get(PropertiesWidthConfigKey, DefaultPropertiesWidth), MinPropertiesWidth, MaxPropertiesWidth));
+        SetPropertiesPaneCollapsed(true, save: false);
+    }
+
+    private void SavePropertiesPaneState()
+    {
+        Grid? rootGrid = this.FindControl<Grid>("RootLayoutGrid");
+        if (rootGrid is not null &&
+            !m_isPropertiesPaneCollapsed &&
+            rootGrid.ColumnDefinitions.Count > 2 &&
+            rootGrid.ColumnDefinitions[2].ActualWidth > 0)
+        {
+            m_lastPropertiesPaneWidth = Math.Clamp(rootGrid.ColumnDefinitions[2].ActualWidth, MinPropertiesWidth, MaxPropertiesWidth);
+            Config.Add(PropertiesWidthConfigKey, m_lastPropertiesPaneWidth);
+        }
+
+        Config.Add(PropertiesCollapsedConfigKey, m_isPropertiesPaneCollapsed);
+        Config.Save(App.ConfigPath);
+    }
+
+    private void SetPropertiesPaneCollapsed(bool collapsed, bool save)
+    {
+        Grid? rootGrid = this.FindControl<Grid>("RootLayoutGrid");
+        Border? propertiesPane = this.FindControl<Border>("PropertiesPane");
+        GridSplitter? splitter = this.FindControl<GridSplitter>("PropertiesPanelSplitter");
+        Button? collapsedButton = this.FindControl<Button>("CollapsedPropertiesButton");
+        if (rootGrid is null || propertiesPane is null || splitter is null || rootGrid.ColumnDefinitions.Count <= 2)
+        {
+            return;
+        }
+
+        if (!collapsed && rootGrid.ColumnDefinitions[2].ActualWidth > 0)
+        {
+            m_lastPropertiesPaneWidth = Math.Clamp(rootGrid.ColumnDefinitions[2].ActualWidth, MinPropertiesWidth, MaxPropertiesWidth);
+        }
+
+        if (!collapsed)
+        {
+            m_lastPropertiesPaneWidth = Math.Max(m_lastPropertiesPaneWidth, DefaultPropertiesWidth);
+        }
+
+        m_isPropertiesPaneCollapsed = collapsed;
+        propertiesPane.IsVisible = !collapsed;
+        splitter.IsVisible = !collapsed;
+        rootGrid.ColumnDefinitions[1].Width = collapsed
+            ? new GridLength(0)
+            : new GridLength(6, GridUnitType.Pixel);
+        rootGrid.ColumnDefinitions[2].Width = collapsed
+            ? new GridLength(0)
+            : new GridLength(m_lastPropertiesPaneWidth, GridUnitType.Pixel);
+        UpdatePropertiesRailButton(collapsedButton);
+
+        if (save)
+        {
+            SavePropertiesPaneState();
+        }
+    }
+
+    private void FloatPropertiesPane()
+    {
+        if (m_isPropertiesPaneFloating)
+        {
+            return;
+        }
+
+        Border? propertiesPane = this.FindControl<Border>("PropertiesPane");
+        Grid? paneContent = this.FindControl<Grid>("PropertiesPaneContent");
+        if (propertiesPane?.Child is not Control child || !ReferenceEquals(child, paneContent))
+        {
+            return;
+        }
+
+        propertiesPane.Child = null;
+        m_isPropertiesPaneFloating = true;
+        SetPropertiesPaneCollapsed(true, save: false);
+        UpdatePropertiesRailButton(this.FindControl<Button>("CollapsedPropertiesButton"));
+
+        Window propertiesWindow = new()
+        {
+            Width = Math.Max(m_lastPropertiesPaneWidth, DefaultPropertiesWidth),
+            Height = 720,
+            MinWidth = 320,
+            MinHeight = 280,
+            Title = "Texture Properties",
+            Icon = CreateAppIcon()
+        };
+        propertiesWindow.Content = child;
+        propertiesWindow.Closed += OnPropertiesWindowClosed;
+        m_propertiesWindow = propertiesWindow;
+        propertiesWindow.Show();
+        propertiesWindow.Activate();
+    }
+
+    private void DockPropertiesPane()
+    {
+        if (!m_isPropertiesPaneFloating)
+        {
+            return;
+        }
+
+        Border? propertiesPane = this.FindControl<Border>("PropertiesPane");
+        Window? propertiesWindow = m_propertiesWindow;
+        Control? child = propertiesWindow?.Content as Control;
+        if (propertiesPane is not null && child is not null)
+        {
+            propertiesWindow!.Content = null;
+            propertiesPane.Child = child;
+        }
+
+        m_propertiesWindow = null;
+        m_isPropertiesPaneFloating = false;
+
+        if (propertiesWindow is not null)
+        {
+            propertiesWindow.Closed -= OnPropertiesWindowClosed;
+            m_suppressPropertiesWindowClosed = true;
+            propertiesWindow.Close();
+            m_suppressPropertiesWindowClosed = false;
+        }
+
+        SetPropertiesPaneCollapsed(false, save: false);
+        UpdatePropertiesRailButton(this.FindControl<Button>("CollapsedPropertiesButton"));
+        SavePropertiesPaneState();
+    }
+
+    private void OnPropertiesWindowClosed(object? sender, EventArgs e)
+    {
+        if (m_suppressPropertiesWindowClosed)
+        {
+            return;
+        }
+
+        Border? propertiesPane = this.FindControl<Border>("PropertiesPane");
+        if (propertiesPane is not null && sender is Window propertiesWindow && propertiesWindow.Content is Control child)
+        {
+            propertiesWindow.Content = null;
+            propertiesPane.Child = child;
+        }
+
+        if (sender is Window window)
+        {
+            window.Closed -= OnPropertiesWindowClosed;
+        }
+
+        m_propertiesWindow = null;
+        m_isPropertiesPaneFloating = false;
+        SetPropertiesPaneCollapsed(false, save: false);
+        UpdatePropertiesRailButton(this.FindControl<Button>("CollapsedPropertiesButton"));
+        SavePropertiesPaneState();
+    }
+
+    private void UpdatePropertiesRailButton(Button? collapsedButton)
+    {
+        if (collapsedButton is null)
+        {
+            return;
+        }
+
+        TextBlock? arrow = this.FindControl<TextBlock>("CollapsedPropertiesArrow");
+        TextBlock? label = this.FindControl<TextBlock>("CollapsedPropertiesLabel");
+
+        collapsedButton.IsVisible = !m_isPropertiesPaneFloating;
+        collapsedButton.Width = 38;
+        collapsedButton.Padding = new Thickness(0);
+
+        if (arrow is not null)
+        {
+            arrow.Text = m_isPropertiesPaneCollapsed ? "<" : ">";
+        }
+
+        if (label is not null)
+        {
+            label.IsVisible = true;
+        }
+    }
+
+    private static WindowIcon CreateAppIcon()
+    {
+        return new WindowIcon(AssetLoader.Open(new Uri("avares://FrostyEditor/Assets/FrostyApp.ico")));
     }
 
     private void OnInspectorTreeCollapsed(object? sender, RoutedEventArgs e)
@@ -446,7 +702,7 @@ public partial class TextureAssetEditorView : UserControl
             node.IsExpanded = shouldExpand;
         }
 
-        RefreshInspectorRows(node);
+        RefreshInspectorRows();
         e.Handled = true;
     }
 
@@ -884,42 +1140,42 @@ public partial class TextureAssetEditorView : UserControl
 
         PreserveInspectorViewport(() =>
         {
-            if (node is not null)
-            {
-                viewModel.RefreshNodeSubtree(node);
-                return;
-            }
-
             viewModel.RefreshVisibleNodes();
         });
     }
 
     private void PreserveInspectorViewport(Action refreshAction)
     {
-        ListBox? inspectorList = this.FindControl<ListBox>("InspectorList");
-        ScrollViewer? scrollViewer = inspectorList?
-            .GetVisualDescendants()
-            .OfType<ScrollViewer>()
-            .FirstOrDefault();
+        Vector nameOffset = m_nameScrollViewer?.Offset ?? default;
+        Vector valueOffset = m_valueScrollViewer?.Offset ?? default;
 
-        if (scrollViewer is null)
+        if (m_valueScrollViewer is null)
         {
             refreshAction();
             return;
         }
 
-        Vector offset = scrollViewer.Offset;
         refreshAction();
 
         Dispatcher.UIThread.Post(() =>
         {
-            ScrollViewer? refreshedScrollViewer = inspectorList?
-                .GetVisualDescendants()
-                .OfType<ScrollViewer>()
-                .FirstOrDefault();
-            if (refreshedScrollViewer is not null)
+            InitializeScrollSync();
+            m_isSyncingScroll = true;
+            try
             {
-                refreshedScrollViewer.Offset = offset;
+                if (m_nameScrollViewer is not null)
+                {
+                    m_nameScrollViewer.Offset = nameOffset;
+                }
+
+                if (m_valueScrollViewer is not null)
+                {
+                    m_valueScrollViewer.Offset = valueOffset;
+                }
+            }
+            finally
+            {
+                m_isSyncingScroll = false;
             }
         }, DispatcherPriority.Background);
     }

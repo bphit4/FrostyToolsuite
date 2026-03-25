@@ -56,10 +56,13 @@ internal static class MeshViewportSceneBuilder
     private static readonly Dictionary<MeshBindingCacheKey, Task<IReadOnlyDictionary<int, MeshViewportMaterialBinding>>> c_bindingBuildTasks = [];
     private static readonly object c_textureCacheLock = new();
     private static readonly Dictionary<string, byte[]?> c_texturePngCache = [];
+    private static readonly Dictionary<string, int> c_texturePngCacheSizes = [];
     private static readonly ConcurrentDictionary<DeferredTextureWarmKey, Task> c_deferredTextureWarmTasks = [];
     private static int c_backgroundWarmupStarted;
+    private static long c_texturePngCacheBytes;
     private static readonly string c_eyeFallbackTexturePath = Path.Combine(AppContext.BaseDirectory, "Assets", "MeshViewport", "eye_fallback_color.png");
     private const string LitSceneNamePrefix = "__frosty_lit__:";
+    private const long MaxTexturePngCacheBytes = 256L * 1024L * 1024L;
 
     public static void Prewarm(MeshAssetLoadResult load, string meshName, bool includeTextures)
     {
@@ -221,6 +224,7 @@ internal static class MeshViewportSceneBuilder
         }));
     }
 
+
     private static void PreloadTextures(
         MeshAssetLoadResult load,
         CachedSceneAssets cachedAssets,
@@ -323,6 +327,11 @@ internal static class MeshViewportSceneBuilder
             {
                 c_bindingBuildTasks.Remove(key);
             }
+        }
+
+        lock (c_textureCacheLock)
+        {
+            ClearTextureCacheNoLock();
         }
 
         MeshViewportMaterialResolver.Invalidate(entryGuid);
@@ -867,7 +876,7 @@ internal static class MeshViewportSceneBuilder
             cache[cacheKey] = pngBytes;
             lock (c_textureCacheLock)
             {
-                c_texturePngCache[cacheKey] = pngBytes;
+                StoreTextureCacheEntryNoLock(cacheKey, pngBytes);
             }
 
             return pngBytes;
@@ -877,7 +886,7 @@ internal static class MeshViewportSceneBuilder
             FrostyLogger.Logger?.LogWarning($"Mesh viewport failed to decode preview texture \"{textureEntry.Path}\": {ex.Message}");
             lock (c_textureCacheLock)
             {
-                c_texturePngCache[cacheKey] = null;
+                StoreTextureCacheEntryNoLock(cacheKey, null);
             }
 
             return null;
@@ -947,7 +956,7 @@ internal static class MeshViewportSceneBuilder
             cache[cacheKey] = pngBytes;
             lock (c_textureCacheLock)
             {
-                c_texturePngCache[cacheKey] = pngBytes;
+                StoreTextureCacheEntryNoLock(cacheKey, pngBytes);
             }
 
             return pngBytes;
@@ -957,11 +966,44 @@ internal static class MeshViewportSceneBuilder
             FrostyLogger.Logger?.LogWarning($"Mesh viewport failed to load bundled preview texture \"{texturePath}\": {ex.Message}");
             lock (c_textureCacheLock)
             {
-                c_texturePngCache[cacheKey] = null;
+                StoreTextureCacheEntryNoLock(cacheKey, null);
             }
 
             return null;
         }
+    }
+
+    private static void StoreTextureCacheEntryNoLock(string cacheKey, byte[]? pngBytes)
+    {
+        if (c_texturePngCacheSizes.TryGetValue(cacheKey, out int existingSize))
+        {
+            c_texturePngCacheBytes -= existingSize;
+            c_texturePngCacheSizes.Remove(cacheKey);
+        }
+
+        c_texturePngCache[cacheKey] = pngBytes;
+
+        if (pngBytes is null)
+        {
+            return;
+        }
+
+        c_texturePngCacheSizes[cacheKey] = pngBytes.Length;
+        c_texturePngCacheBytes += pngBytes.Length;
+        if (c_texturePngCacheBytes <= MaxTexturePngCacheBytes)
+        {
+            return;
+        }
+
+        ClearTextureCacheNoLock();
+        FrostyLogger.Logger?.LogInfo("Mesh viewport preview texture cache exceeded 256 MB and was cleared to reduce memory pressure.");
+    }
+
+    private static void ClearTextureCacheNoLock()
+    {
+        c_texturePngCache.Clear();
+        c_texturePngCacheSizes.Clear();
+        c_texturePngCacheBytes = 0;
     }
 
     private static string BuildTextureCacheKey(Guid textureGuid, bool forceOpaqueAlpha, PreviewTextureQuality textureQuality)

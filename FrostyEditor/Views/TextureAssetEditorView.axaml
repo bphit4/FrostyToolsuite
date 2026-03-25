@@ -20,16 +20,29 @@
     <DataTemplate x:Key="InspectorNameTemplate"
                   DataType="models:InspectorNodeModel">
       <Border Background="Transparent"
-              Padding="3,0,2,0"
-              Height="18"
+              Padding="2,0,6,0"
+              Height="22"
               ClipToBounds="True"
               PointerPressed="OnInspectorNamePointerPressed">
-        <Grid ColumnDefinitions="*">
-          <TextBlock Grid.Column="0"
+        <Grid ColumnDefinitions="16,*"
+              Margin="{Binding FlatNameIndent}">
+          <Path Grid.Column="0"
+                Width="6"
+                Height="6"
+                Fill="#DADADA"
+                Stretch="Uniform"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Data="{Binding ExpandGlyphData}"
+                IsVisible="{Binding ShowExpandGlyph}"/>
+          <TextBlock Grid.Column="1"
                      VerticalAlignment="Center"
-                     FontSize="10"
-                     LineHeight="12"
+                     Foreground="#F2F2F2"
+                     FontFamily="Global User Interface"
+                     FontSize="11"
+                     LineHeight="14"
                      FontWeight="{Binding NameFontWeight}"
+                     ClipToBounds="True"
                      TextWrapping="NoWrap">
             <Run Text="{Binding Name}"/>
             <Run Text="{Binding NameSuffix}"/>
@@ -89,6 +102,7 @@
                                      FontWeight="{Binding NameFontWeight}"/>
                 <SelectableTextBlock Classes="inspector-value-text"
                                      Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                     Foreground="#A7A7A7"
                                      IsVisible="{Binding ShowPointerDisplayPath}"/>
               </StackPanel>
             </StackPanel>
@@ -192,6 +206,7 @@
                                        FontWeight="{Binding NameFontWeight}"/>
                   <SelectableTextBlock Classes="inspector-value-text"
                                        Text="{Binding PointerDisplayPath, StringFormat=({0})}"
+                                       Foreground="#A7A7A7"
                                        IsVisible="{Binding ShowPointerDisplayPath}"/>
                 </StackPanel>
               </StackPanel>
@@ -231,7 +246,7 @@
 
     <!-- ── FROZEN NAME LIST ──────────────────────────────────────── -->
     <Style Selector="ListBox.inspector-name-list">
-      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="Background" Value="#24242A"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="0"/>
     </Style>
@@ -257,9 +272,9 @@
 
     <!-- ── SCROLLABLE VALUE LIST ─────────────────────────────────── -->
     <Style Selector="ListBox.inspector-list">
-      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Padding" Value="0,0,14,14"/>
     </Style>
     <Style Selector="ListBox.inspector-list ScrollViewer">
       <Setter Property="AllowAutoHide" Value="False"/>
@@ -314,7 +329,7 @@
                   Background="#232328"
                   BorderBrush="#8A8A90"
                   BorderThickness="1"
-                  CornerRadius="2">
+                  CornerRadius="0">
             <Path x:Name="CheckGlyph"
                   Width="8"
                   Height="6"
@@ -342,9 +357,19 @@
       <Setter Property="BorderBrush" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="0"/>
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
       <Setter Property="MinWidth" Value="0"/>
       <Setter Property="MinHeight" Value="16"/>
       <Setter Property="MaxHeight" Value="16"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.inspector-value-text">
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="TextBlock.inspector-value-text">
+      <Setter Property="FontFamily" Value="Global User Interface"/>
+      <Setter Property="FontSize" Value="11"/>
     </Style>
     <Style Selector="TextBox.inspector-editor ScrollViewer">
       <Setter Property="AllowAutoHide" Value="True"/>
@@ -359,16 +384,31 @@
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderBrush" Value="Transparent"/>
     </Style>
+    <Style Selector="Button.properties-rail-button">
+      <Setter Property="Background" Value="#202025"/>
+      <Setter Property="BorderBrush" Value="#34343A"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    </Style>
 
     <!-- ── SELECTABLE VALUE TEXT ────────────────────────────────── -->
+    <Style Selector="ToggleButton">
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+    </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,1,380">
+  <Grid x:Name="RootLayoutGrid" RowDefinitions="Auto,*" ColumnDefinitions="*,4,480">
 
     <!-- ═══ TOP TOOLBAR ════════════════════════════════════════════ -->
-    <Border Grid.ColumnSpan="3" Classes="panel" Padding="6" Margin="0,0,0,8">
+    <Border Grid.ColumnSpan="3" Classes="panel" Padding="4" Margin="0,0,0,4">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="3">
           <Button Classes="toolbar" Command="{Binding ExportTextureCommand}">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
               <Path Width="10" Height="10" Stretch="Uniform" Fill="#F0F0F0" Data="M4,0 L6,0 L6,5 L8,5 L5,8 L2,5 L4,5 Z M1,9 L9,9 L9,10 L1,10 Z"/>
@@ -382,34 +422,29 @@
             </StackPanel>
           </Button>
           <Button Classes="toolbar" Content="Revert" Command="{Binding RevertTextureCommand}" IsVisible="{Binding CanRevert}"/>
-          <Border Width="1" Height="22" Background="#5A5A60" Margin="8,0,8,0" VerticalAlignment="Center"/>
-          <ToggleButton x:Name="RedButton" Content="R" IsChecked="True" MinWidth="28" Command="{Binding ToggleRedCommand}"/>
-          <ToggleButton x:Name="GreenButton" Content="G" IsChecked="True" MinWidth="28" Command="{Binding ToggleGreenCommand}"/>
-          <ToggleButton x:Name="BlueButton" Content="B" IsChecked="True" MinWidth="28" Command="{Binding ToggleBlueCommand}"/>
-          <ToggleButton x:Name="AlphaButton" Content="A" IsChecked="True" MinWidth="28" Command="{Binding ToggleAlphaCommand}"/>
-          <ToggleButton x:Name="LumaButton" Content="Y" MinWidth="28" Margin="6,0,0,0" Command="{Binding ToggleLuminanceCommand}"/>
+          <Border Width="1" Height="22" Background="#5A5A60" Margin="6,0,6,0" VerticalAlignment="Center"/>
+          <ToggleButton x:Name="RedButton" Content="R" IsChecked="True" MinWidth="30" Width="30" Height="24" Padding="0" VerticalAlignment="Center" Command="{Binding ToggleRedCommand}"/>
+          <ToggleButton x:Name="GreenButton" Content="G" IsChecked="True" MinWidth="30" Width="30" Height="24" Padding="0" VerticalAlignment="Center" Command="{Binding ToggleGreenCommand}"/>
+          <ToggleButton x:Name="BlueButton" Content="B" IsChecked="True" MinWidth="30" Width="30" Height="24" Padding="0" VerticalAlignment="Center" Command="{Binding ToggleBlueCommand}"/>
+          <ToggleButton x:Name="AlphaButton" Content="A" IsChecked="False" MinWidth="30" Width="30" Height="24" Padding="0" VerticalAlignment="Center" Command="{Binding ToggleAlphaCommand}"/>
+          <ToggleButton x:Name="LumaButton" Content="Y" MinWidth="30" Width="30" Height="24" Padding="0" Margin="4,0,0,0" VerticalAlignment="Center" Command="{Binding ToggleLuminanceCommand}"/>
           <ToggleButton x:Name="CheckerButton" Content="Grid" IsChecked="True" MinWidth="44" Command="{Binding ToggleCheckerboardCommand}"/>
-          <TextBlock Text="Mip:" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
-          <ComboBox Width="150"
+          <TextBlock Text="Mip:" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"/>
+          <ComboBox Width="140"
+                    MinWidth="140"
+                    Height="26"
                     ItemsSource="{Binding AvailableMips}"
                     SelectedIndex="{Binding SelectedMipLevel}" />
           <TextBlock Text="Slice:" VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="{Binding HasSliceSelector}" FontSize="11"/>
-          <ComboBox Width="82"
+          <ComboBox Width="68"
                     IsVisible="{Binding HasSliceSelector}"
                     ItemsSource="{Binding AvailableSlices}"
                     SelectedIndex="{Binding SelectedSliceLevel}" />
-          <Button Classes="toolbar" Content="-" Width="28" Margin="10,0,0,0" Click="OnZoomOutClicked"/>
-          <Button Classes="toolbar" Content="Reset" Width="54" Click="OnResetViewClicked"/>
+          <Button Classes="toolbar" Content="-" Width="26" Margin="8,0,0,0" Click="OnZoomOutClicked"/>
+          <Button Classes="toolbar" Content="Reset" Width="58" Click="OnResetViewClicked"/>
           <Button Classes="toolbar" Content="+" Width="28" Click="OnZoomInClicked"/>
-          <TextBlock Text="{Binding ZoomText}" VerticalAlignment="Center" Width="52" TextAlignment="Center" FontSize="11"/>
+          <TextBlock Text="{Binding ZoomText}" VerticalAlignment="Center" Width="56" TextAlignment="Center" FontSize="11"/>
         </StackPanel>
-        <TextBlock Grid.Column="1"
-                   Text="{Binding TextureFormatLabel}"
-                   VerticalAlignment="Center"
-                   HorizontalAlignment="Right"
-                   Margin="12,0,0,0"
-                   Classes="subtle"
-                   FontWeight="SemiBold"/>
       </Grid>
     </Border>
 
@@ -441,25 +476,76 @@
                    RenderTransformOrigin="0,0"/>
           </Canvas>
         </Border>
+        <Button x:Name="CollapsedPropertiesButton"
+                Classes="properties-rail-button"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch"
+                Margin="0"
+                Width="38"
+                Padding="0"
+                ZIndex="20"
+                Click="OnPropertiesPaneToggleClicked"
+                IsVisible="False">
+          <Grid RowDefinitions="34,*" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <TextBlock x:Name="CollapsedPropertiesArrow"
+                       Text="&lt;"
+                       FontFamily="Arial"
+                       FontWeight="Bold"
+                       FontSize="15"
+                       Margin="0"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="CollapsedPropertiesLabel"
+                       Grid.Row="1"
+                       Text="P&#10;R&#10;O&#10;P&#10;E&#10;R&#10;T&#10;I&#10;E&#10;S"
+                       FontFamily="Arial"
+                       FontWeight="Bold"
+                       FontSize="14"
+                       TextAlignment="Center"
+                       LineHeight="14"
+                       Margin="0,4,0,8"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       IsVisible="True"/>
+          </Grid>
+        </Button>
       </Grid>
     </Border>
 
     <!-- ═══ COLUMN SPLITTER ════════════════════════════════════════ -->
     <GridSplitter Grid.Row="1"
                   Grid.Column="1"
-                  Width="1"
+                  x:Name="PropertiesPanelSplitter"
+                  Width="4"
                   Background="#3B3B3B"
                   HorizontalAlignment="Stretch"
                   ResizeDirection="Columns"/>
 
     <!-- ═══ PROPERTIES PANEL ═══════════════════════════════════════ -->
-    <Border Grid.Row="1" Grid.Column="2" Classes="panel" Padding="8">
-      <Grid RowDefinitions="Auto,*">
-        <TextBlock Text="Properties" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,6"/>
+    <Border Grid.Row="1" Grid.Column="2" x:Name="PropertiesPane" Classes="panel" Padding="0">
+      <Grid x:Name="PropertiesPaneContent" RowDefinitions="Auto,*">
+        <Border Background="Transparent" Padding="0,0,0,4">
+          <Border.ContextFlyout>
+            <MenuFlyout>
+              <MenuItem Header="Expand" Click="OnPropertiesExpandMenuClicked"/>
+              <MenuItem Header="Collapse" Click="OnPropertiesCollapseMenuClicked"/>
+              <MenuItem Header="Undock (Float Mode)" Click="OnPropertiesFloatMenuClicked"/>
+              <MenuItem Header="Dock" Click="OnPropertiesDockMenuClicked"/>
+              <Separator/>
+              <MenuItem Header="Reset to Default Dock Location" Click="OnPropertiesResetDockMenuClicked"/>
+            </MenuFlyout>
+          </Border.ContextFlyout>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Properties" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Classes="toolbar" Width="24" Height="22" Padding="0" Margin="0,0,6,0" Click="OnPropertiesFloatButtonClicked" ToolTip.Tip="Undock Properties">
+              <TextBlock Text="[]" FontFamily="Consolas" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            </Button>
+          </Grid>
+        </Border>
         <Grid Grid.Row="1" RowDefinitions="Auto,*">
           <TextBox Classes="search-box"
                    Watermark="Filter"
-                   Margin="0,0,0,6"
+                   Margin="0,0,0,4"
                    Text="{Binding FilterText}"/>
 
           <!-- ┌─────────────────────────────────────────────────────┐
@@ -467,12 +553,12 @@
                │  No H-scroll     │      │ H+V scrollable            │
                └─────────────────────────────────────────────────────┘ -->
           <Grid Grid.Row="1"
-                ColumnDefinitions="Auto,8,*"
-                Margin="0,0,0,4"
+                ColumnDefinitions="Auto,6,*"
+                Margin="0,0,0,2"
                 ClipToBounds="True">
 
             <Border Width="{Binding InspectorNameColumnWidth}"
-                    Background="#363636"/>
+                    Background="#24242A"/>
 
             <!-- Resize grip -->
             <Border Grid.Column="1"
@@ -484,18 +570,29 @@
                     PointerReleased="OnInspectorGripReleased"
                     ZIndex="10">
               <Border Width="1"
-                      Background="#35353A"
+                      Background="#3A3A40"
                       HorizontalAlignment="Center"/>
             </Border>
 
             <Border Grid.Column="2"
-                    Background="#292929"/>
+                    Background="#17181B"/>
 
-            <ListBox x:Name="InspectorList"
-                     Grid.ColumnSpan="3"
+            <ListBox x:Name="InspectorNameList"
+                     Grid.Column="0"
+                     Classes="inspector-name-list"
+                     Width="{Binding InspectorNameColumnWidth}"
+                     ItemsSource="{Binding VisibleNodes}"
+                     ItemTemplate="{StaticResource InspectorNameTemplate}"
+                     ScrollViewer.AllowAutoHide="True"
+                     ScrollViewer.IsScrollInertiaEnabled="False"
+                     ScrollViewer.IsScrollChainingEnabled="False"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+            <ListBox x:Name="InspectorValueList"
+                     Grid.Column="2"
                      Classes="inspector-list"
                      ItemsSource="{Binding VisibleNodes}"
-                     ItemTemplate="{StaticResource InspectorRowTemplate}"
+                     ItemTemplate="{StaticResource InspectorValueTemplate}"
                      ScrollViewer.AllowAutoHide="True"
                      ScrollViewer.IsScrollInertiaEnabled="False"
                      ScrollViewer.IsScrollChainingEnabled="False"

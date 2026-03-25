@@ -15,6 +15,7 @@ using Frosty.Sdk;
 using FrostyEditor.Managers;
 using FrostyEditor.Models;
 using FrostyEditor.Utils;
+using FrostyEditor.Views;
 using FrostyEditor.Windows;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
@@ -24,7 +25,7 @@ namespace FrostyEditor.ViewModels;
 public partial class MainViewModel : ViewModelBase
 {
     private string? m_currentProjectDirectory;
-    private string m_currentProjectName = "FrostyToolsuite Project";
+    private string m_currentProjectName = "New Project";
     private bool m_isClosingDocuments;
 
     [ObservableProperty]
@@ -46,6 +47,15 @@ public partial class MainViewModel : ViewModelBase
     public string DocumentStatus => $"{Documents.Count} open document(s)";
     public string ActiveDocumentTitle => ActiveDocument?.Header ?? "Home Page";
     public string BuildStatus => Logger.LastEntry ?? "Ready";
+    public string CurrentProjectName => string.IsNullOrWhiteSpace(m_currentProjectDirectory) ? "New Project - Unsaved" : m_currentProjectName;
+    public string CurrentProjectPathDisplay => string.IsNullOrWhiteSpace(m_currentProjectDirectory) ? "Project actions" : m_currentProjectDirectory;
+    public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(ProfilesLibrary.DisplayName) ? "No Profile Loaded" : ProfilesLibrary.DisplayName;
+    public string ActiveProfileKey => string.IsNullOrWhiteSpace(ProfilesLibrary.ProfileName) ? "Profile" : ProfilesLibrary.ProfileName;
+    public IReadOnlyList<(string Key, string DisplayName)> AvailableProfiles =>
+        Config.GameProfiles
+            .Select(profileKey => (Key: profileKey, DisplayName: ProfilesLibrary.GetDisplayName(profileKey) ?? profileKey))
+            .OrderBy(profile => profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     public MainViewModel()
     {
@@ -123,11 +133,12 @@ public partial class MainViewModel : ViewModelBase
     {
         ProjectPersistenceManager.ResetSession();
         m_currentProjectDirectory = null;
-        m_currentProjectName = "FrostyToolsuite Project";
+        m_currentProjectName = "New Project";
         ReloadOpenDocumentsFromSource();
         RefreshOpenDocumentSessionState();
         DataExplorer.RefreshExplorerState();
         Logger.LogInfo("Started a new project session.");
+        RefreshShellState();
     }
 
     [RelayCommand]
@@ -153,11 +164,12 @@ public partial class MainViewModel : ViewModelBase
         }
 
         m_currentProjectDirectory = result.Path;
-        m_currentProjectName = Path.GetFileName(result.Path) ?? "FrostyToolsuite Project";
+        m_currentProjectName = Path.GetFileName(result.Path) ?? "New Project";
         ReloadOpenDocumentsFromSource();
         RefreshOpenDocumentSessionState();
         DataExplorer.RefreshExplorerState();
         Logger.LogInfo(result.Message);
+        RefreshShellState();
     }
 
     [RelayCommand]
@@ -179,6 +191,7 @@ public partial class MainViewModel : ViewModelBase
         RefreshOpenDocumentSessionState();
         DataExplorer.RefreshExplorerState();
         Logger.LogInfo(result.Message);
+        RefreshShellState();
     }
 
     [RelayCommand]
@@ -204,10 +217,11 @@ public partial class MainViewModel : ViewModelBase
         }
 
         m_currentProjectDirectory = result.Path;
-        m_currentProjectName = Path.GetFileName(result.Path) ?? "FrostyToolsuite Project";
+        m_currentProjectName = Path.GetFileName(result.Path) ?? "New Project";
         RefreshOpenDocumentSessionState();
         DataExplorer.RefreshExplorerState();
         Logger.LogInfo(result.Message);
+        RefreshShellState();
     }
 
     [RelayCommand]
@@ -249,6 +263,57 @@ public partial class MainViewModel : ViewModelBase
     private void OpenAbout()
     {
         Logger.LogInfo("Frosty Editor 2.0 is running on Avalonia with the M24 shell rebuilt.");
+    }
+
+    [RelayCommand]
+    private void ActivateHomePage()
+    {
+        ActivateDocumentByKey("home-page");
+    }
+
+    [RelayCommand]
+    private async Task ReselectProfile()
+    {
+        await OpenProfileSelectionWindowAsync(AppStartupOptions.Empty).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task SwitchProfile(string? profileKey)
+    {
+        if (string.IsNullOrWhiteSpace(profileKey))
+        {
+            return;
+        }
+
+        await OpenProfileSelectionWindowAsync(new AppStartupOptions
+        {
+            ProfileKey = profileKey,
+            InitFsKeyPath = App.StartupOptions.InitFsKeyPath,
+            AutoSelectProfile = true
+        }).ConfigureAwait(true);
+    }
+
+    private async Task OpenProfileSelectionWindowAsync(AppStartupOptions startupOptions)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
+            desktop.MainWindow is not MainWindow mainWindow)
+        {
+            return;
+        }
+
+        if (!await ConfirmCloseAllDocumentsAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        App.StartupOptions = startupOptions;
+        ViewWindow profileWindow = ViewWindow.Create<ProfileSelectViewModel>();
+        App.MainViewModel = null;
+        desktop.MainWindow = profileWindow;
+        profileWindow.Show();
+        profileWindow.Activate();
+        mainWindow.AllowProgrammaticClose();
+        mainWindow.Close();
     }
 
     [RelayCommand]
@@ -510,5 +575,13 @@ public partial class MainViewModel : ViewModelBase
                 reloadable.ReloadFromSource();
             }
         }
+    }
+
+    private void RefreshShellState()
+    {
+        OnPropertyChanged(nameof(CurrentProjectName));
+        OnPropertyChanged(nameof(CurrentProjectPathDisplay));
+        OnPropertyChanged(nameof(ActiveProfileDisplayName));
+        OnPropertyChanged(nameof(ActiveProfileKey));
     }
 }

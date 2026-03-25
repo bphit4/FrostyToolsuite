@@ -6,26 +6,26 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="FrostyEditor.Views.AssetEditorView"
              x:DataType="viewModels:AssetEditorViewModel">
-  <Grid ColumnDefinitions="2*,12,*" RowDefinitions="Auto,Auto,*">
-    <StackPanel Grid.ColumnSpan="3" Margin="0,0,0,10">
-      <TextBlock Text="{Binding FileName}" FontSize="20" FontWeight="Bold"/>
+  <Grid ColumnDefinitions="2*,6,*" RowDefinitions="Auto,Auto,*">
+    <StackPanel Grid.ColumnSpan="3" Margin="0,0,0,6">
+      <TextBlock Text="{Binding FileName}" FontSize="18" FontWeight="Bold"/>
       <TextBlock Text="{Binding Name}" Classes="subtle" Margin="0,2,0,0"/>
     </StackPanel>
 
-    <UniformGrid Grid.Row="1" Grid.Column="0" Columns="3" Margin="0,0,0,10">
-      <Border Classes="panel" Margin="0,0,6,0" Padding="8">
+    <UniformGrid Grid.Row="1" Grid.Column="0" Columns="3" Margin="0,0,0,6">
+      <Border Classes="panel" Margin="0,0,4,0" Padding="6">
         <StackPanel>
           <TextBlock Text="Type" Classes="subtle"/>
           <TextBlock Text="{Binding Type}" FontWeight="SemiBold"/>
         </StackPanel>
       </Border>
-      <Border Classes="panel" Margin="6,0" Padding="8">
+      <Border Classes="panel" Margin="4,0" Padding="6">
         <StackPanel>
           <TextBlock Text="Asset Type" Classes="subtle"/>
           <TextBlock Text="{Binding AssetType}" FontWeight="SemiBold"/>
         </StackPanel>
       </Border>
-      <Border Classes="panel" Margin="6,0,0,0" Padding="8">
+      <Border Classes="panel" Margin="4,0,0,0" Padding="6">
         <StackPanel>
           <TextBlock Text="Size" Classes="subtle"/>
           <TextBlock Text="{Binding SizeText}" FontWeight="SemiBold"/>
@@ -33,12 +33,12 @@
       </Border>
     </UniformGrid>
 
-    <Border Grid.Row="2" Grid.Column="0" Classes="panel" Padding="12">
-      <StackPanel Spacing="12">
+    <Border Grid.Row="2" Grid.Column="0" Classes="panel" Padding="8">
+      <StackPanel Spacing="8">
         <TextBlock Text="Editor Surface" Classes="section-title"/>
         <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
-        <Border Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="3" Padding="14">
-          <StackPanel Spacing="8">
+        <Border Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="0" Padding="8">
+          <StackPanel Spacing="6">
             <TextBlock Text="Metadata" FontWeight="SemiBold"/>
             <TextBlock Text="{Binding Path}" Classes="subtle" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding BundleCount}" Classes="subtle"/>
@@ -47,8 +47,8 @@
       </StackPanel>
     </Border>
 
-    <Border Grid.Row="2" Grid.Column="2" Classes="panel" Padding="12">
-      <StackPanel Spacing="10">
+    <Border Grid.Row="2" Grid.Column="2" Classes="panel" Padding="8">
+      <StackPanel Spacing="8">
         <TextBlock Text="Inspector" Classes="section-title"/>
         <TextBlock Text="The old WPF editor exposed a property grid and tool panes here. The rewrite now reserves the space and surfaces key asset metadata so those editors can be dropped in incrementally."
                    TextWrapping="Wrap"

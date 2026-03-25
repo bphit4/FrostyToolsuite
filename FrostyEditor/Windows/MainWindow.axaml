@@ -11,20 +11,27 @@
         Height="900"
         MinWidth="1100"
         MinHeight="700"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="56"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
         Title="Frosty Editor 2.0">
-  <Grid x:Name="ShellHost" Background="#1F1F23">
-    <Border HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Padding="18,12"
-            Background="#2B2B30"
-            BorderBrush="#4A4A50"
-            BorderThickness="1"
-            CornerRadius="6">
-      <TextBlock Text="Loading editor shell..."
-                 FontSize="14"
-                 Foreground="#F2F2F2"/>
-    </Border>
-  </Grid>
+  <Border Background="#1F1F23"
+          BorderBrush="#2A2A2E"
+          BorderThickness="0,0,0,1">
+    <Grid x:Name="ShellHost" Background="#1F1F23">
+      <Border HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Padding="18,12"
+              Background="#2B2B30"
+              BorderBrush="#4A4A50"
+              BorderThickness="1"
+              CornerRadius="6">
+        <TextBlock Text="Loading editor shell..."
+                   FontSize="14"
+                   Foreground="#F2F2F2"/>
+      </Border>
+    </Grid>
+  </Border>
 </Window>

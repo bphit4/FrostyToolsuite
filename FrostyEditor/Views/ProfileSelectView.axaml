@@ -8,6 +8,19 @@
              x:DataType="viewModels:ProfileSelectViewModel"
              x:CompileBindings="True">
   <UserControl.Styles>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="MinHeight" Value="30"/>
+    </Style>
+    <Style Selector="Grid.action-row Button">
+      <Setter Property="MinWidth" Value="84"/>
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ProgressBar">
+      <Setter Property="CornerRadius" Value="0"/>
+    </Style>
     <Style Selector="ListBoxItem">
       <Setter Property="Margin" Value="0"/>
       <Setter Property="Padding" Value="0"/>
@@ -29,37 +42,42 @@
       <Setter Property="BorderThickness" Value="1"/>
     </Style>
   </UserControl.Styles>
-  <Grid RowDefinitions="Auto,*,Auto" Margin="10">
-    <Border Grid.Row="0" Classes="surface" Padding="2" Margin="0,0,0,6" Height="170" ClipToBounds="True">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="10">
+    <Border Grid.Row="0" Classes="surface" Padding="2" Margin="0,0,0,6" Height="170" ClipToBounds="True" CornerRadius="0">
       <Image Source="avares://FrostyEditor/Assets/ProfileBanner.png"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
               Stretch="UniformToFill"/>
     </Border>
 
-    <Border Grid.Row="1" Classes="surface" Padding="10">
-      <Grid RowDefinitions="Auto,*,Auto">
-        <StackPanel Margin="0,0,0,8">
+    <Border Grid.Row="1" Classes="surface" Padding="8" CornerRadius="0">
+      <Grid RowDefinitions="Auto,Auto,Auto">
+        <StackPanel Margin="0,0,0,4">
           <TextBlock Text="{Binding Heading}" FontSize="22" FontWeight="Bold"/>
         </StackPanel>
 
         <ListBox Grid.Row="1"
                  ItemsSource="{Binding Profiles}"
                  SelectedItem="{Binding SelectedProfile}"
-                 MinHeight="330"
                  HorizontalAlignment="Stretch"
+                 VerticalAlignment="Top"
+                 MaxHeight="246"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  DoubleTapped="ProfilesList_OnDoubleTapped"
-                 IsEnabled="{Binding CanEditProfiles}">
+                 IsEnabled="{Binding CanEditProfiles}"
+                 IsVisible="{Binding ShowProfilePicker}">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <Border Classes="panel profile-card" Margin="0" Padding="8">
-                <Grid ColumnDefinitions="180,*">
-                  <Border Width="180" Height="56" CornerRadius="4" Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1" ClipToBounds="True" VerticalAlignment="Top">
+              <Border Classes="panel profile-card" Margin="0,0,0,6" Padding="8" CornerRadius="0" MinHeight="68">
+                <Grid ColumnDefinitions="92,*">
+                  <Border Width="92" Height="56" CornerRadius="0" Background="#1E1E1E" BorderBrush="#34343A" BorderThickness="1" ClipToBounds="True" VerticalAlignment="Top">
                     <Grid>
                       <Image Source="{Binding Banner}"
-                             Stretch="UniformToFill"
+                             Width="180"
+                             Height="56"
+                             HorizontalAlignment="Right"
+                             Stretch="Fill"
                              IsVisible="{Binding HasBanner}"/>
                       <Border Background="#252526" IsVisible="{Binding ShowFallbackIcon}">
                         <Image Source="{Binding FallbackIcon}"
@@ -70,7 +88,7 @@
                       </Border>
                     </Grid>
                   </Border>
-                  <StackPanel Grid.Column="1" Spacing="2" Margin="12,0,0,0">
+                  <StackPanel Grid.Column="1" Spacing="2" Margin="10,0,0,0">
                     <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding Path}" Classes="subtle" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -80,21 +98,54 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,8,0,0">
+        <Border Grid.Row="1"
+                Classes="panel profile-card"
+                Margin="0"
+                Padding="8"
+                CornerRadius="0"
+                MinHeight="68"
+                VerticalAlignment="Top"
+                IsVisible="{Binding ShowSelectedProfileCard}">
+          <Grid ColumnDefinitions="92,*">
+            <Border Width="92" Height="56" CornerRadius="0" Background="#1E1E1E" BorderBrush="#34343A" BorderThickness="1" ClipToBounds="True" VerticalAlignment="Top">
+              <Grid>
+                <Image Source="{Binding SelectedProfile.Banner}"
+                       Width="180"
+                       Height="56"
+                       HorizontalAlignment="Right"
+                       Stretch="Fill"
+                       IsVisible="{Binding SelectedProfile.HasBanner}"/>
+                <Border Background="#252526" IsVisible="{Binding SelectedProfile.ShowFallbackIcon}">
+                  <Image Source="{Binding SelectedProfile.FallbackIcon}"
+                         Width="26"
+                         Height="26"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"/>
+                </Border>
+              </Grid>
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="2" Margin="10,0,0,0">
+              <TextBlock Text="{Binding SelectedProfile.Name}" FontSize="15" FontWeight="SemiBold"/>
+              <TextBlock Text="{Binding SelectedProfile.Path}" Classes="subtle" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Classes="action-row" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,6,0,0" IsVisible="{Binding ShowProfileActions}">
           <Button Grid.Column="0" Content="{StaticResource ID_PROFILE_CANCEL}" Command="{Binding CancelCommand}" HorizontalAlignment="Left"/>
-          <Button Grid.Column="1" Content="Remove" Command="{Binding RemoveProfileCommand}" Margin="8,0,0,0" IsEnabled="{Binding CanInteract}"/>
-          <Button Grid.Column="2" Content="{StaticResource ID_PROFILE_ADD}" Command="{Binding AddProfileCommand}" Margin="8,0,0,0" IsEnabled="{Binding CanEditProfiles}"/>
-          <Button Grid.Column="3" Classes="primary" Content="{StaticResource ID_PROFILE_SELECT}" Command="{Binding SelectProfileCommand}" Margin="8,0,0,0" IsEnabled="{Binding CanInteract}"/>
+          <Button Grid.Column="1" Content="Remove" Command="{Binding RemoveProfileCommand}" IsEnabled="{Binding CanInteract}"/>
+          <Button Grid.Column="2" Content="{StaticResource ID_PROFILE_ADD}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanEditProfiles}"/>
+          <Button Grid.Column="3" Classes="primary" Content="{StaticResource ID_PROFILE_SELECT}" Command="{Binding SelectProfileCommand}" IsEnabled="{Binding CanInteract}"/>
         </Grid>
       </Grid>
     </Border>
 
     <Border Grid.Row="2"
-            Classes="panel"
-            Margin="0,6,0,0"
-            Padding="10,8">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
-        <StackPanel Spacing="6">
+             Classes="panel"
+             Padding="8"
+             CornerRadius="0">
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,*">
+        <StackPanel Spacing="4">
           <TextBlock Text="Startup Status"
                      FontWeight="SemiBold"/>
           <TextBlock Text="{Binding StartupStatus}"
@@ -109,7 +160,7 @@
         <Grid Grid.Row="1"
               Grid.ColumnSpan="2"
               ColumnDefinitions="*,Auto"
-              Margin="0,10,0,0"
+              Margin="0,6,0,0"
               IsVisible="{Binding IsBusy}">
           <ProgressBar Minimum="0"
                        Maximum="1"
@@ -125,14 +176,17 @@
         </Grid>
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
-                Margin="0,10,0,0"
-                Padding="8"
-                CornerRadius="6"
-                Background="#0E1520"
-                BorderBrush="#2A3444"
+                Margin="0,6,0,0"
+                Padding="6"
+                CornerRadius="0"
+                Background="#17171B"
+                BorderBrush="#2F2F34"
                 BorderThickness="1"
                 IsVisible="{Binding IsBusy}">
-          <ItemsControl ItemsSource="{Binding StartupSteps}">
+          <ScrollViewer VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled"
+                        MaxHeight="170">
+            <ItemsControl ItemsSource="{Binding StartupSteps}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
@@ -151,15 +205,16 @@
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
-          </ItemsControl>
+            </ItemsControl>
+          </ScrollViewer>
         </Border>
         <Border Grid.Row="3"
-                Grid.ColumnSpan="2"
-                Margin="0,10,0,0"
-                Padding="8"
-                CornerRadius="6"
-                Background="#0E1520"
-                BorderBrush="#2A3444"
+                 Grid.ColumnSpan="2"
+                 Margin="0,6,0,0"
+                 Padding="6"
+                 CornerRadius="0"
+                 Background="#17171B"
+                 BorderBrush="#2F2F34"
                 BorderThickness="1"
                 IsVisible="{Binding HasStartupLog}">
           <Grid RowDefinitions="Auto,*">
@@ -174,9 +229,9 @@
                      TextWrapping="NoWrap"
                      FontFamily="Cascadia Mono,Consolas,monospace"
                      FontSize="11"
-                     MinHeight="96"
-                     MaxHeight="140"
-                     BorderBrush="#3F3F46"/>
+                     VerticalAlignment="Stretch"
+                     Background="#101013"
+                     BorderBrush="#2F2F34"/>
           </Grid>
         </Border>
       </Grid>
